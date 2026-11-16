@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-wjImfFFxV1NmKMGMIfN1XBGg74zmkWvMR7jskiBZ8pc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<script src="../../shared/aib-store.js" data-app="goals" data-home="../../" data-title="Goals"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Goals</title>
+<link rel="stylesheet" href="../../vendor/fonts/tracker-fonts.css">
+<script src="../../vendor/js/d3-7.9.0.min.js"></script>
+<style>
+/* Layout idea: summary first (sentence, attention, area scores), then the five check-off cards, then history. */
+:root {
+  --bg: #e9edf1;
+  --panel: #ffffff;
+  --ink: #0f1820;
+  --muted: #46525e;
+  --line: #c9d2dc;
+  --accent: #1f5f7d;
+  --ok: #16753f;
+  --warn: #8f5500;
+  --bad: #b02f22;
+  --a-all: #0f1820;
+  --a-chores: #a65808;
+  --a-fitness: #1a7a55;
+  --a-life: #2f5bc0;
+  --a-conn: #b8306a;
+  --a-creative: #7444c4;
+  --shadow: 0 1px 2px rgba(15, 24, 32, .06), 0 2px 8px rgba(15, 24, 32, .05);
+  --on-fill: #ffffff;
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --radius: 12px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #080b0f; --panel: #1b2530; --ink: #f4f7fa; --muted: #c2ccd6; --line: #435263;
+    --accent: #8fd0ee; --ok: #62d69a; --warn: #f2b45a; --bad: #ff8b7b;
+    --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 2px 10px rgba(0, 0, 0, .5); --on-fill: #080b0f;
+    --a-all: #f4f7fa; --a-chores: #f0a04b; --a-fitness: #46c08f; --a-life: #6f97f0; --a-conn: #ef6d9f; --a-creative: #ab86f0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #080b0f; --panel: #1b2530; --ink: #f4f7fa; --muted: #c2ccd6; --line: #435263;
+  --accent: #8fd0ee; --ok: #62d69a; --warn: #f2b45a; --bad: #ff8b7b;
+  --shadow: 0 1px 0 rgba(255, 255, 255, .04) inset, 0 2px 10px rgba(0, 0, 0, .5); --on-fill: #080b0f;
+  --a-all: #f4f7fa; --a-chores: #f0a04b; --a-fitness: #46c08f; --a-life: #6f97f0; --a-conn: #ef6d9f; --a-creative: #ab86f0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 20px 64px; display: grid; gap: 20px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; margin: 0; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 19px; font-weight: 700; }
+h3 { font-size: 16px; font-weight: 700; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+
+.head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.head p { margin: 6px 0 0; color: var(--muted); max-width: 62ch; }
+.head p b { color: var(--ink); font-weight: 600; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 8px 14px; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--muted); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn-primary { color: #0e1319; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn-primary { color: #0e1319; } }
+.btn-ghost { border-color: transparent; background: transparent; padding: 4px 8px; }
+.btn-ghost:hover { border-color: var(--line); }
+.btn-danger { color: var(--bad); }
+.btn:disabled { opacity: .5; cursor: default; }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; min-width: 0; box-shadow: var(--shadow); }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.note { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+
+.banner { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; box-shadow: var(--shadow); }
+.banner.ex { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.banner.win { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--panel)); }
+.banner.err { border-color: var(--bad); }
+.banner .grow { flex: 1; min-width: 200px; }
+
+.gif { display: inline-block; flex: none; width: 64px; height: 64px; background: url(data:image/gif;base64,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) center / contain no-repeat; }
+.gif.sm { width: 36px; height: 36px; }
+
+/* attention */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 12px; color: var(--muted); }
+.chip b { color: var(--ink); }
+.att-list { display: grid; gap: 0; }
+.att-row { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--line); }
+.att-row:first-child { border-top: 0; }
+.att-flags { font-size: 17px; letter-spacing: 1px; }
+.att-why { color: var(--muted); font-size: 13px; }
+.stripe-urgent { box-shadow: inset 3px 0 0 var(--bad); padding-left: 8px; }
+.stripe-late { box-shadow: inset 3px 0 0 var(--warn); padding-left: 8px; }
+.stripe-high { box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
+
+/* tiles */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+.tile { position: relative; }
+.tile-name { display: flex; align-items: center; gap: 6px; font-weight: 600; min-height: 36px; }
+.tile-name .gif { margin-left: auto; }
+.big { font-family: var(--font-display); font-size: 38px; font-weight: 700; line-height: 1.05; margin: 4px 0; font-variant-numeric: tabular-nums; }
+.big.win { color: var(--ok); }
+.meter { position: relative; height: 8px; border-radius: 4px; background: var(--line); margin: 8px 0 4px; overflow: visible; }
+.meter > i { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+.meter > b { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--muted); left: 90%; }
+.spark { height: 38px; margin-top: 6px; }
+.cheer { color: var(--ok); font-weight: 600; font-size: 13px; margin-top: 4px; }
+
+/* check-off sections */
+.weeknav { display: flex; align-items: center; gap: 6px; }
+.weeknav .label { min-width: 9.5rem; text-align: center; font-weight: 600; }
+.sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 12px; }
+.sec-head { display: flex; align-items: center; gap: 10px; }
+.sec-head h2 { flex: 1; }
+.sec-pct { font-family: var(--font-display); font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sec-pct.win { color: var(--ok); }
+.cheer-block { display: flex; align-items: center; gap: 12px; margin: 10px 0 0; padding: 8px 12px; border-radius: 10px; background: color-mix(in srgb, var(--ok) 10%, var(--panel)); font-size: 13px; }
+.cheer-block b { display: block; color: var(--ok); font-size: 15px; }
+.goal { padding: 12px 0; border-top: 1px solid var(--line); display: grid; gap: 8px; }
+.goal:first-of-type { border-top: 0; }
+.goal-top { display: flex; align-items: center; gap: 8px; }
+.goal-name { font-weight: 600; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.tag { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; border-radius: 6px; padding: 1px 6px; border: 1px solid var(--line); color: var(--muted); }
+.tag.hi { color: var(--accent); border-color: currentColor; }
+.tag.urg { color: var(--bad); border-color: currentColor; }
+.goal-mid { display: flex; align-items: center; gap: 10px; }
+.bar { flex: 1; height: 7px; border-radius: 4px; background: var(--line); overflow: hidden; }
+.bar > i { display: block; height: 100%; border-radius: 4px; }
+.goal-count { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.day { border: 1px solid var(--line); background: transparent; border-radius: 8px; height: 40px; display: grid; place-items: center; font-size: 12px; line-height: 1.1; padding: 0; color: var(--muted); }
+.day:hover:not(:disabled) { border-color: var(--muted); }
+.day.on { color: var(--on-fill); border-color: transparent; font-weight: 600; }
+.day.today { outline: 2px solid var(--ink); outline-offset: -2px; }
+.day:disabled { opacity: .35; cursor: default; }
+.empty { color: var(--muted); font-size: 13px; padding: 8px 0; }
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: var(--shadow); }
+.filters .lbl { margin-right: 2px; }
+.filters .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+.fchip { border: 1px solid var(--line); background: transparent; border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+.fchip:hover { border-color: var(--muted); }
+.fchip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .fchip[aria-pressed="true"] { color: #0e1319; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .fchip[aria-pressed="true"] { color: #0e1319; } }
+.fcount { margin-left: auto; font-size: 13px; color: var(--muted); }
+.once-mid { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.once-mid .due { flex: 1; font-size: 13px; color: var(--muted); }
+.due.late { color: var(--bad); font-weight: 600; }
+.due.soon { color: var(--warn); font-weight: 600; }
+.btn-done { border-color: var(--ok); color: var(--ok); }
+.btn-done.is-done { background: var(--ok); color: var(--on-fill); }
+.add-in-sec { margin-top: 8px; }
+
+/* history */
+.heat { overflow-x: auto; position: relative; }
+.hgrid { display: grid; gap: 3px; font-size: 12px; min-width: 520px; font-variant-numeric: tabular-nums; }
+.hcell { height: 28px; border-radius: 5px; display: grid; place-items: center; background: var(--line); }
+.hlabel { display: flex; gap: 6px; align-items: center; white-space: nowrap; overflow: hidden; padding-right: 8px; min-width: 0; }
+.hlabel span:last-child { overflow: hidden; text-overflow: ellipsis; }
+.hhead { color: var(--muted); text-align: center; align-self: end; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.chart { position: relative; min-height: 250px; }
+.tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.12); padding: 6px 10px; font-size: 12px; white-space: nowrap; z-index: 3; }
+.tip .h { color: var(--muted); margin-bottom: 2px; }
+.tip .r { display: flex; gap: 6px; align-items: center; }
+.tip .r b { margin-left: auto; padding-left: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 12px; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+td { padding: 8px 6px; border-bottom: 1px solid var(--line); }
+tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; }
+.warn { color: var(--warn); font-weight: 600; }
+.okc { color: var(--ok); font-weight: 600; }
+
+/* side panel */
+dialog.drawer { margin: 0 0 0 auto; height: 100dvh; max-height: 100dvh; max-width: none; width: min(460px, 100vw); border-radius: 14px 0 0 14px; border-right: 0; }
+dialog.drawer .dlg { min-height: 100%; display: flex; flex-direction: column; }
+dialog.drawer .dlg-actions { margin-top: auto; position: sticky; bottom: 0; background: var(--panel); padding: 12px 0 2px; border-top: 1px solid var(--line); }
+.drawer-head { display: flex; align-items: flex-start; gap: 8px; }
+.drawer-head h3 { flex: 1; font-size: 19px; }
+.x { border: 0; background: none; font-size: 22px; line-height: 1; padding: 2px 6px; color: var(--muted); border-radius: 8px; }
+.x:hover { background: var(--bg); color: var(--ink); }
+@media (prefers-reduced-motion: no-preference) {
+  dialog.drawer[open] { animation: slidein .22s ease-out; }
+  @keyframes slidein { from { transform: translateX(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+}
+@media (max-width: 640px) {
+  dialog.drawer { margin: auto 0 0 0; width: 100vw; height: auto; max-height: 90dvh; border-radius: 14px 14px 0 0; border-right: 1px solid var(--line); border-bottom: 0; }
+}
+.open-btn { border: 0; background: none; padding: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; overflow-wrap: anywhere; }
+.open-btn:hover { color: inherit; }
+/* Option A: the whole row is the target; it highlights and its chevron nudges on hover */
+.rowlink { cursor: pointer; transition: background-color .12s; }
+.rowlink:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.chev { color: var(--muted); font-size: 22px; line-height: 1; flex: none; padding: 0 2px; transition: transform .12s, color .12s; }
+.rowlink:hover .chev { color: var(--ink); transform: translateX(2px); }
+.goal.rowlink { margin: 0 -10px; padding: 12px 10px; border-radius: 10px; }
+.att-row.rowlink { border-radius: 8px; }
+tr.rowlink:hover td { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+td.chev-td { width: 1.5rem; text-align: right; padding-left: 0; }
+.goal-top .open-btn { flex: 1; }
+.goal-top .open-btn .goal-name { display: block; }
+
+/* dialogs */
+dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--ink); padding: 0; width: min(460px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(10, 15, 20, .45); }
+.dlg { padding: 18px; display: grid; gap: 12px; }
+.field { display: grid; gap: 4px; }
+.field label, .lbl { font-size: 13px; font-weight: 600; }
+.field input, .field select, .field textarea { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--bg); width: 100%; }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: 14px; }
+.dlg-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.dlg-actions .left { margin-right: auto; }
+.entries { display: grid; gap: 6px; }
+.entry { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.entry .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.form-err { color: var(--bad); font-size: 13px; }
+
+/* toasts */
+.toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 50; max-width: min(360px, calc(100vw - 32px)); }
+.toast { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--ok); border-radius: 10px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.15); }
+.toast.bad { border-left-color: var(--bad); }
+@media (prefers-reduced-motion: no-preference) {
+  .toast, .cheer-block, .banner.win { animation: pop .35s ease-out both; }
+  @keyframes pop { from { transform: translateY(6px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+  .day.on { transition: background-color .2s; }
+}
+@media (max-width: 520px) {
+  .wrap { padding: 16px 16px 48px; }
+  h1 { font-size: 25px; }
+  .row2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="head" id="overview">
+    <div>
+      <h1>Goals</h1>
+      <p id="summary">Loading your goals…</p>
+    </div>
+    <button type="button" class="btn btn-primary" data-act="new-goal">＋ New goal</button>
+  </header>
+
+  <section class="tiles" id="tiles" aria-label="Area scores this week"></section>
+
+  <div class="banner err" id="status-note" hidden></div>
+
+  <div class="banner ex" id="examples-banner" hidden>
+    <span style="font-size:22px">🧪</span>
+    <div class="grow"><b>These are example goals.</b> Tap one to make it yours, or clear them all.</div>
+    <button type="button" class="btn btn-danger" data-act="remove-examples">Remove all examples</button>
+  </div>
+
+  <div class="banner win" id="all-win" hidden>
+    <span class="gif"></span>
+    <div class="grow"><b>🏆 90%+ across all your goals this week!</b><br>That's an outstanding week. 🎉</div>
+  </div>
+
+  <section class="card" id="attention">
+    <h2>🚨 Needs attention</h2>
+    <p class="note">Due within 3 days, late, or behind pace.</p>
+    <div class="chips">
+      <span class="chip">🔥 Due in 3 days or less <b class="num" id="cnt-urgent">0</b></span>
+      <span class="chip">⏰ Late <b class="num" id="cnt-late">0</b></span>
+    </div>
+    <div class="att-list" id="att-list"></div>
+  </section>
+
+  <section id="checkoff" class="card" style="background:transparent;border:0;padding:0;box-shadow:none">
+    <div class="card-head" style="margin-bottom:10px">
+      <div>
+        <h2>✅ Check off your week</h2>
+        <p class="note" style="margin-bottom:0">Tap a day to tick it off. Tap a goal to open it.</p>
+      </div>
+      <div class="weeknav">
+        <button type="button" class="btn btn-ghost" data-act="week-prev" aria-label="Previous week">◀</button>
+        <span class="label num" id="week-label">This week</span>
+        <button type="button" class="btn btn-ghost" data-act="week-next" aria-label="Next week">▶</button>
+      </div>
+    </div>
+    <div class="filters" role="group" aria-label="Filter goals">
+      <span class="lbl">Filter:</span>
+      <button type="button" class="fchip" data-filter="type:weekly" aria-pressed="false">🔁 Weekly</button>
+      <button type="button" class="fchip" data-filter="type:once" aria-pressed="false">📌 One-time</button>
+      <span class="sep" aria-hidden="true"></span>
+      <button type="button" class="fchip" data-filter="flag:late" aria-pressed="false">⏰ Late</button>
+      <button type="button" class="fchip" data-filter="flag:urgent" aria-pressed="false">🔥 Urgent</button>
+      <button type="button" class="fchip" data-filter="flag:high" aria-pressed="false">⭐ High priority</button>
+      <button type="button" class="btn btn-ghost small" data-act="clear-filters" id="clear-filters" hidden>Clear</button>
+      <span class="fcount num" id="filter-count"></span>
+    </div>
+    <div class="sections" id="sections"></div>
+  </section>
+
+  <section class="card" id="weekly-grid">
+    <div class="card-head">
+      <div>
+        <h2>📆 Week by week</h2>
+        <p class="note">Last 9 weeks · ✓ = target met.</p>
+      </div>
+      <select id="heat-area" aria-label="Area" class="btn">
+        <option value="all">All areas</option>
+      </select>
+    </div>
+    <div class="heat" id="heat"></div>
+  </section>
+
+  <section class="card" id="trend">
+    <h2>📈 Share of weekly targets hit</h2>
+    <p class="note">Shaded band = 🏆 90%+.</p>
+    <div class="legend" id="legend"></div>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <div class="grid2">
+    <section class="card" id="connections">
+      <h2>💬 Friends &amp; family reach-outs</h2>
+      <p class="note">Days since last contact · ⚠️ over 7.</p>
+      <div id="conn"></div>
+    </section>
+    <section class="card" id="deadlines">
+      <h2>⏳ Upcoming deadlines</h2>
+      <p class="note">Soonest first.</p>
+      <div id="dl"></div>
+    </section>
+  </div>
+
+  <section class="card" id="archived" hidden>
+    <h2>🗃️ Finished, paused and achieved</h2>
+    <p class="note">Tap one to bring it back.</p>
+    <div id="arch-list"></div>
+  </section>
+</main>
+
+<dialog id="goal-dlg" class="drawer" aria-labelledby="goal-dlg-title">
+  <form class="dlg" id="goal-form" novalidate>
+    <div class="drawer-head"><h3 id="goal-dlg-title">New goal</h3><button type="button" class="x" data-close aria-label="Close">×</button></div>
+    <div class="field"><label for="g-name">Goal</label><input id="g-name" maxlength="80" placeholder="e.g. Strength workouts" required></div>
+    <div class="row2">
+      <div class="field"><label for="g-area">Area</label><select id="g-area"></select></div>
+      <div class="field"><label for="g-status">Status</label><select id="g-status"><option>Active</option><option>Paused</option><option>Achieved</option></select></div>
+    </div>
+    <div class="field"><label for="g-kind">Type</label><select id="g-kind"><option value="weekly">🔁 Weekly goal (repeats every week)</option><option value="once">📌 One-time task (do it once)</option></select></div>
+    <div id="weekly-fields" class="dlg" style="padding:0">
+      <div class="row2">
+        <div class="field"><label for="g-target">Weekly target</label><input id="g-target" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 3"></div>
+        <div class="field"><label for="g-unit">Unit</label><input id="g-unit" maxlength="20" placeholder="e.g. workouts, km, calls"></div>
+      </div>
+      <label class="check"><input type="checkbox" id="g-amounts"> Log amounts (like km or pages) instead of one tick per day</label>
+    </div>
+    <div class="row2">
+      <div class="field"><label for="g-priority">Priority</label><select id="g-priority"><option value="">None</option><option>High</option><option>Medium</option><option>Low</option></select></div>
+      <div class="field"><label for="g-date" id="g-date-label">Target date (optional)</label><input id="g-date" type="date"></div>
+    </div>
+    <label class="check" id="g-done-wrap"><input type="checkbox" id="g-done"> ✅ Done</label>
+    <div class="field"><label for="g-why">Why it matters (optional)</label><input id="g-why" maxlength="140"></div>
+    <p class="form-err" id="g-err" hidden></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-danger left" id="g-delete" hidden>Delete goal</button>
+      <button type="button" class="btn" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary" id="g-save">Save goal</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="day-dlg" aria-labelledby="day-dlg-title">
+  <form class="dlg" id="day-form" novalidate>
+    <h3 id="day-dlg-title">Log</h3>
+    <div class="entries" id="day-entries"></div>
+    <div class="row2">
+      <div class="field"><label for="d-amount" id="d-amount-label">Amount</label><input id="d-amount" type="number" min="0" step="any" inputmode="decimal" value="1"></div>
+      <div class="field"><label for="d-note">Note (optional)</label><input id="d-note" maxlength="140"></div>
+    </div>
+    <p class="form-err" id="d-err" hidden></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn" data-close>Done</button>
+      <button type="submit" class="btn btn-primary" id="d-add">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="confirm-dlg" aria-labelledby="confirm-title">
+  <div class="dlg">
+    <h3 id="confirm-title">Remove all examples?</h3>
+    <p id="confirm-text" style="margin:0"></p>
+    <div class="dlg-actions">
+      <button type="button" class="btn" data-close>Keep them</button>
+      <button type="button" class="btn btn-danger" id="confirm-yes">Remove</button>
+    </div>
+  </div>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  const AREAS = [
+    { key: 'Chores', label: 'Chores', emoji: '🧹', color: 'var(--a-chores)', cheer: 'Chores crushed! Keep the streak going.' },
+    { key: 'Fitness', label: 'Fitness', emoji: '💪', color: 'var(--a-fitness)', cheer: 'Fitness crushed! Your body thanks you.' },
+    { key: 'Life tasks', label: 'Life tasks', emoji: '📋', color: 'var(--a-life)', cheer: 'Life admin handled! Future you is grateful.' },
+    { key: 'Connections', label: 'Friends & family', emoji: '💬', color: 'var(--a-conn)', cheer: 'Great connector! 90%+ of reach-outs done. 💛' },
+    { key: 'Creative', label: 'Creative', emoji: '🎨', color: 'var(--a-creative)', cheer: 'Creative streak! Keep making things. ✨' },
+  ];
+  const AREA = Object.fromEntries(AREAS.map((a) => [a.key, a]));
+  const WIN = 0.9;
+  const DAY = 864e5;
+  const S = { db: null, goals: [], checkins: [], goalsReady: false, ckReady: false, weekOffset: 0, heatArea: 'all', filters: new Set(), prevWins: null, prevMet: null, busy: new Set() };
+
+  // ---------- helpers ----------
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const pad = (n) => String(n).padStart(2, '0');
+  const isoDay = (d) => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  const parseDay = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+  const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const sundayOf = (d) => addDays(d, -d.getDay());
+  const today = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+  const weekIndex = (dayStr) => Math.round((sundayOf(today()) - sundayOf(parseDay(dayStr))) / (7 * DAY));
+  const fmtShort = (d) => d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+  const fmtLong = (d) => d.toLocaleDateString('en', { weekday: 'short', month: 'short', day: 'numeric' });
+  const weekLabel = (sun) => { const sat = addDays(sun, 6); return sun.getMonth() === sat.getMonth() ? fmtShort(sun) + '–' + sat.getDate() : fmtShort(sun) + ' – ' + fmtShort(sat); };
+  const pctText = (v) => (v == null ? '—' : Math.round(v * 100) + '%');
+  const numText = (v) => String(Math.round((+v || 0) * 100) / 100);
+  const areaOf = (key) => AREA[key] || { key, label: key || 'Other', emoji: '•', color: 'var(--muted)', cheer: '' };
+  const isOnce = (g) => g.kind === 'once';
+  const dueText = (g) => g.daysLeft === null ? 'No due date' : g.daysLeft < 0 ? 'Overdue by ' + -g.daysLeft + (g.daysLeft === -1 ? ' day' : ' days') : g.daysLeft === 0 ? 'Due today' : g.daysLeft === 1 ? 'Due tomorrow' : 'Due ' + fmtLong(parseDay(g.targetDate));
+  const colorVar = (key) => (key === 'All' ? 'var(--a-all)' : areaOf(key).color);
+  const resolveColor = (cssVar) => { const m = /var\((--[^)]+)\)/.exec(cssVar); return m ? getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim() || '#888' : cssVar; };
+
+  function toast(html, opts = {}) {
+    const t = document.createElement('div');
+    t.className = 'toast' + (opts.bad ? ' bad' : '');
+    t.innerHTML = (opts.gif ? '<span class="gif sm"></span>' : '') + '<div>' + html + '</div>';
+    $('toasts').append(t);
+    setTimeout(() => t.remove(), opts.ms || 5000);
+  }
+  function showError(e, what) {
+    const code = e && e.code;
+    const msg = code === 'quota_exceeded' ? 'Storage is full. Remove some old goals or check-ins and try again.'
+      : code === 'invalid_argument' ? 'You don’t have permission to change this tracker.'
+      : 'Couldn’t ' + what + '. Check your connection and try again.';
+    toast('⚠️ ' + esc(msg), { bad: true, ms: 7000 });
+  }
+
+  // ---------- model ----------
+  function compute() {
+    const t = today();
+    const tStr = isoDay(t);
+    const daysSoFar = t.getDay() + 1;
+    const active = S.goals.filter((g) => (g.status || 'Active') === 'Active');
+    const sums = new Map();
+    const last = new Map();
+    for (const c of S.checkins) {
+      if (!c.day) continue;
+      const wk = weekIndex(c.day);
+      if (wk >= 0 && wk <= 8) { const k = c.goalId + '|' + wk; sums.set(k, (sums.get(k) || 0) + (+c.amount || 0)); }
+      if (c.day <= tStr && c.day > (last.get(c.goalId) || '')) last.set(c.goalId, c.day);
+    }
+    const doneOf = (id, wk) => sums.get(id + '|' + wk) || 0;
+    // One-time tasks score 1 in the week they're done, and 0 in the week they're due (or this week, while overdue) if not done by then.
+    const onceWeek = (g, wk) => {
+      const doneWk = g.doneDay ? weekIndex(g.doneDay) : null;
+      const dueWk = g.targetDate ? weekIndex(g.targetDate) : null;
+      if (doneWk === wk) return 1;
+      const openThen = doneWk === null || doneWk < wk;
+      if (openThen && dueWk === wk) return 0;
+      if (wk === 0 && doneWk === null && dueWk !== null && dueWk > 0) return 0;
+      return null;
+    };
+    const pctOf = (g, wk) => (isOnce(g) ? onceWeek(g, wk) : g.target > 0 ? Math.min(doneOf(g.id, wk) / g.target, 1) : null);
+    const mean = (a) => (a.length ? a.reduce((s, x) => s + x, 0) / a.length : null);
+    const areaWeek = (key, wk) => mean(active.filter((g) => key === 'All' || g.area === key).map((g) => pctOf(g, wk)).filter((p) => p !== null));
+    const goals = active.map((g) => {
+      const once = isOnce(g);
+      const done = once ? (g.doneDay ? 1 : 0) : doneOf(g.id, 0);
+      const pct = pctOf(g, 0);
+      const daysLeft = g.targetDate ? Math.round((parseDay(g.targetDate) - t) / DAY) : null;
+      const open = !(once && g.doneDay);
+      let status;
+      if (once) status = g.doneDay ? 'Done' : daysLeft !== null && daysLeft < 0 ? 'Overdue' : daysLeft !== null && daysLeft <= 3 ? 'Due soon' : 'Open';
+      else status = !(g.target > 0) ? 'No target' : done >= g.target ? 'Met' : done >= Math.floor((g.target * (daysSoFar - 1)) / 7) ? 'On track' : 'Behind';
+      const urgent = open && daysLeft !== null && daysLeft >= 0 && daysLeft <= 3;
+      const late = open && ((daysLeft !== null && daysLeft < 0) || status === 'Behind');
+      const high = g.priority === 'High';
+      const lastDay = once ? g.doneDay || null : last.get(g.id) || null;
+      return { ...g, once, done, pct, status, lastDay, daysSince: lastDay ? Math.round((t - parseDay(lastDay)) / DAY) : null, daysLeft, urgent, late, high, open };
+    });
+    const sunNow = sundayOf(t);
+    const series = (key) => [8, 7, 6, 5, 4, 3, 2, 1, 0].map((wk) => ({ wk, week: addDays(sunNow, -7 * wk), pct: areaWeek(key, wk) })).filter((p) => p.pct !== null);
+    const areas = AREAS.map((a) => {
+      const gs = goals.filter((g) => g.area === a.key && g.pct !== null);
+      return { ...a, pct: areaWeek(a.key, 0), last: areaWeek(a.key, 1), met: gs.filter((g) => g.pct >= 1).length, total: gs.length, series: series(a.key) };
+    });
+    const all = { pct: areaWeek('All', 0), last: areaWeek('All', 1), series: series('All') };
+    const attention = goals.filter((g) => g.urgent || g.late).map((g) => {
+      const why = [];
+      if (g.urgent) why.push(g.daysLeft === 0 ? 'Due today' : 'Due in ' + g.daysLeft + (g.daysLeft === 1 ? ' day' : ' days'));
+      if (g.daysLeft !== null && g.daysLeft < 0 && g.open) why.push('Overdue by ' + -g.daysLeft + (g.daysLeft === -1 ? ' day' : ' days'));
+      if (g.status === 'Behind') why.push('Behind pace this week');
+      if (g.high) why.push('High priority');
+      return { g, urgent: g.urgent, late: g.late, high: g.high, why: why.join(' · '), rank: (g.late && g.daysLeft !== null && g.daysLeft < 0 ? 0 : g.urgent ? 1 : 2) - (g.high ? 0.5 : 0) };
+    }).sort((a, b) => a.rank - b.rank || (a.g.daysLeft ?? 999) - (b.g.daysLeft ?? 999));
+    const scored = goals.filter((g) => g.pct !== null);
+    return { t, goals, areas, all, attention, areaWeek, doneOf, pctOf, met: scored.filter((g) => g.pct >= 1).length, totalT: scored.length };
+  }
+
+  // ---------- render ----------
+  function render() {
+    const ready = S.goalsReady && S.ckReady;
+    const M = compute();
+    renderSummary(M, ready);
+    renderAttention(M);
+    renderTiles(M);
+    renderSections(M);
+    renderHeat(M);
+    renderTrend(M);
+    renderConn(M);
+    renderDeadlines(M);
+    renderArchived();
+    $('examples-banner').hidden = !S.goals.some((g) => g.example);
+    $('all-win').hidden = !(M.all.pct != null && M.all.pct >= WIN);
+    if (ready) celebrate(M);
+  }
+
+  function renderSummary(M, ready) {
+    if (!ready) return;
+    if (!S.goals.length) {
+      $('summary').innerHTML = 'No goals yet. Press <b>＋ New goal</b> to set your first one.';
+      return;
+    }
+    const scored = M.areas.filter((a) => a.pct !== null).sort((a, b) => a.pct - b.pct);
+    $('summary').innerHTML = '📅 Week of <b class="num">' + esc(weekLabel(sundayOf(M.t))) + '</b>: <b class="num">' + M.met + '</b> of <b class="num">' + M.totalT +
+      '</b> goals met so far, <b class="num">' + pctText(M.all.pct) + '</b> of weekly targets done. Last week you hit <b class="num">' + pctText(M.all.last) + '</b>.' +
+      (scored.length ? ' Furthest behind right now: <b>' + esc(scored[0].label) + '</b>.' : '');
+  }
+
+  function renderAttention(M) {
+    $('cnt-urgent').textContent = M.attention.filter((a) => a.urgent).length;
+    $('cnt-late').textContent = M.attention.filter((a) => a.late).length;
+    $('att-list').innerHTML = M.attention.length ? M.attention.map((a) => {
+      const flags = (a.urgent ? '🔥' : '') + (a.late ? '⏰' : '') + (a.high ? '⭐' : '');
+      const stripe = a.late ? 'stripe-late' : 'stripe-urgent';
+      const unit = a.g.unit ? ' ' + esc(a.g.unit) : '';
+      const action = a.g.once
+        ? '<button type="button" class="btn btn-done" data-act="toggle-done" data-id="' + esc(a.g.id) + '">✓ Mark done</button>'
+        : '';
+      return '<div class="att-row ' + stripe + ' rowlink" data-act="edit-goal" data-id="' + esc(a.g.id) + '"><span class="att-flags">' + flags + '</span><div><div>' + '<button type="button" class="open-btn" data-act="edit-goal" data-id="' + esc(a.g.id) + '"><b>' + esc(a.g.name) + '</b></button> <span class="muted small">' + (a.g.once ? '📌 One-time · ' : '🔁 Weekly · ') + esc(areaOf(a.g.area).emoji + ' ' + areaOf(a.g.area).label) + '</span></div><div class="att-why">' + esc(a.why) +
+        (!a.g.once && a.g.target > 0 ? ' · ' + numText(a.g.done) + ' / ' + numText(a.g.target) + unit + ' this week' : '') + '</div></div>' + action + '<span class="chev" aria-hidden="true">›</span></div>';
+    }).join('') : '<p class="empty">🎉 Nothing due in the next 3 days and nothing late.</p>';
+  }
+
+  function renderTiles(M) {
+    $('tiles').innerHTML = M.areas.map((a) => {
+      const win = a.pct != null && a.pct >= WIN;
+      const lastWin = a.last != null && a.last >= WIN;
+      return '<div class="card tile" id="tile-' + esc(a.key.replace(/\s+/g, '-').toLowerCase()) + '">' +
+        '<div class="tile-name">' + a.emoji + ' ' + esc(a.label) + (win ? '<span class="gif sm" role="img" aria-label="Trophy celebration"></span>' : '') + '</div>' +
+        '<div class="big' + (win ? ' win' : '') + '">' + pctText(a.pct) + '</div>' +
+        '<div class="small muted num">' + (a.total ? a.met + ' of ' + a.total + ' met' : 'No goals yet') + ' · last wk ' + pctText(a.last) + (lastWin ? ' 🏆' : '') + '</div>' +
+        '<div class="meter" title="90% line"><i style="width:' + Math.round((a.pct || 0) * 100) + '%;background:' + (win ? 'var(--ok)' : a.color) + '"></i><b></b></div>' +
+        '<div class="spark" data-area="' + esc(a.key) + '"></div>' +
+        (win ? '<div class="cheer">🎉 90%+ this week!</div>' : '') + '</div>';
+    }).join('');
+    document.querySelectorAll('#tiles .spark').forEach((el) => drawSpark(el, M.areas.find((a) => a.key === el.dataset.area)));
+  }
+
+  function drawSpark(el, a) {
+    const pts = a.series;
+    if (pts.length < 2) return;
+    const w = Math.max(80, el.clientWidth);
+    const h = 38;
+    const x = d3.scaleLinear([8, 0], [4, w - 4]);
+    const y = d3.scaleLinear([0, 1], [h - 4, 4]);
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('height', h).attr('viewBox', `0 0 ${w} ${h}`).attr('aria-hidden', 'true');
+    svg.append('rect').attr('x', 0).attr('width', w).attr('y', y(1)).attr('height', y(WIN) - y(1)).attr('fill', resolveColor('var(--ok)')).attr('opacity', 0.15);
+    const col = resolveColor(a.color);
+    svg.append('path').datum(pts).attr('fill', col).attr('opacity', 0.12).attr('d', d3.area((d) => x(d.wk), h - 4, (d) => y(d.pct)));
+    svg.append('path').datum(pts).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line((d) => x(d.wk), (d) => y(d.pct)));
+    const lp = pts[pts.length - 1];
+    svg.append('circle').attr('cx', x(lp.wk)).attr('cy', y(lp.pct)).attr('r', 3.5).attr('fill', col);
+  }
+
+  function renderSections(M) {
+    const t = M.t;
+    const wkSun = addDays(sundayOf(t), 7 * S.weekOffset);
+    const wk = -S.weekOffset;
+    $('week-label').textContent = S.weekOffset === 0 ? 'This week' : weekLabel(wkSun);
+    document.querySelector('[data-act="week-next"]').disabled = S.weekOffset >= 0;
+    document.querySelector('[data-act="week-prev"]').disabled = S.weekOffset <= -8;
+    const days = [...Array(7)].map((_, i) => addDays(wkSun, i));
+    const tStr = isoDay(t);
+    const byGoalDay = new Map();
+    for (const c of S.checkins) {
+      const k = c.goalId + '|' + c.day;
+      byGoalDay.set(k, (byGoalDay.get(k) || 0) + (+c.amount || 0));
+    }
+    const wkEnd = isoDay(addDays(wkSun, 6));
+    const wkStart = isoDay(wkSun);
+    // One-time tasks show while open (if created by the week's end) and in the week they were done.
+    const visible = M.goals.filter((g) => !g.once || (g.doneDay ? g.doneDay >= wkStart && g.doneDay <= wkEnd : S.weekOffset === 0 || !g.createdAt || isoDay(new Date(g.createdAt)) <= wkEnd));
+    const types = [...S.filters].filter((f) => f.startsWith('type:')).map((f) => f.slice(5));
+    const flags = [...S.filters].filter((f) => f.startsWith('flag:')).map((f) => f.slice(5));
+    const shown = visible.filter((g) => (!types.length || types.includes(g.once ? 'once' : 'weekly')) && (!flags.length || flags.some((f) => g[f])));
+    const filtering = S.filters.size > 0;
+    $('clear-filters').hidden = !filtering;
+    $('filter-count').textContent = filtering ? 'Showing ' + shown.length + ' of ' + visible.length + ' goals' : visible.length + ' goals';
+    document.querySelectorAll('.fchip').forEach((c) => c.setAttribute('aria-pressed', String(S.filters.has(c.dataset.filter))));
+    const rank = (g) => (g.late ? 0 : g.urgent ? 1 : 2) + (g.high ? 0 : 0.5) + (g.once && !g.open ? 3 : 0);
+    const cards = AREAS.map((a) => {
+      const pct = M.areaWeek(a.key, wk);
+      const win = pct != null && pct >= WIN;
+      const gs = shown.filter((g) => g.area === a.key).sort((x, y) => rank(x) - rank(y) || String(x.name).localeCompare(String(y.name)));
+      if (filtering && !gs.length) return '';
+      const rows = gs.map((g) => {
+        if (g.once) {
+          const badge = g.doneDay ? '✅' : g.status === 'Overdue' ? '⏰' : g.status === 'Due soon' ? '🔥' : '📌';
+          const dueCls = g.doneDay ? '' : g.status === 'Overdue' ? ' late' : g.status === 'Due soon' ? ' soon' : '';
+          return '<div class="goal rowlink" data-act="edit-goal" data-id="' + esc(g.id) + '"><div class="goal-top"><span aria-label="' + esc(g.status) + '">' + badge + '</span>' + '<button type="button" class="open-btn" data-act="edit-goal" data-id="' + esc(g.id) + '"><span class="goal-name">' + esc(g.name) + '</span></button>' +
+            '<span class="tag">One-time</span>' + (g.example ? '<span class="tag">Example</span>' : '') + (g.high ? '<span class="tag hi">High</span>' : '') +
+            '<span class="chev" aria-hidden="true">›</span></div>' +
+            '<div class="once-mid"><span class="due' + dueCls + '">' + esc(g.doneDay ? 'Done ' + fmtLong(parseDay(g.doneDay)) : dueText(g)) + '</span>' +
+            '<button type="button" class="btn btn-done' + (g.doneDay ? ' is-done' : '') + '" data-act="toggle-done" data-id="' + esc(g.id) + '" aria-pressed="' + (g.doneDay ? 'true' : 'false') + '">' + (g.doneDay ? '✓ Done · Undo' : '✓ Mark done') + '</button></div></div>';
+        }
+        const done = M.doneOf(g.id, wk);
+        const gp = g.target > 0 ? Math.min(done / g.target, 1) : null;
+        const status = S.weekOffset === 0 ? g.status : !(g.target > 0) ? 'No target' : done >= g.target ? 'Met' : 'Missed';
+        const badge = { Met: '✅', 'On track': '🟡', Behind: '⚠️', Missed: '❌', 'No target': '➖' }[status];
+        const unit = g.unit ? ' ' + esc(g.unit) : '';
+        const strip = days.map((d) => {
+          const ds = isoDay(d);
+          const amt = byGoalDay.get(g.id + '|' + ds) || 0;
+          const on = amt > 0;
+          const future = ds > tStr;
+          const lbl = 'SMTWTFS'[d.getDay()];
+          return '<button type="button" class="day' + (on ? ' on' : '') + (ds === tStr ? ' today' : '') + '" data-act="day" data-id="' + esc(g.id) + '" data-day="' + ds + '"' +
+            (future ? ' disabled' : '') + (on ? ' style="background:' + a.color + '"' : '') +
+            ' aria-label="' + esc(g.name) + ', ' + esc(fmtLong(d)) + (on ? ', logged ' + numText(amt) : ', not logged') + '">' +
+            lbl + '<br>' + (on ? (g.amounts || amt > 1 ? numText(amt) : '✓') : d.getDate()) + '</button>';
+        }).join('');
+        return '<div class="goal rowlink" data-act="edit-goal" data-id="' + esc(g.id) + '"><div class="goal-top"><span aria-label="' + esc(status) + '">' + badge + '</span>' + '<button type="button" class="open-btn" data-act="edit-goal" data-id="' + esc(g.id) + '"><span class="goal-name">' + esc(g.name) + '</span></button>' +
+          (g.example ? '<span class="tag">Example</span>' : '') + (g.urgent ? '<span class="tag urg">Urgent</span>' : '') + (g.priority === 'High' ? '<span class="tag hi">High</span>' : '') +
+          '<span class="chev" aria-hidden="true">›</span></div>' +
+          '<div class="goal-mid"><div class="bar"><i style="width:' + Math.round((gp || 0) * 100) + '%;background:' + (gp >= 1 ? 'var(--ok)' : a.color) + '"></i></div>' +
+          '<span class="goal-count num">' + numText(done) + (g.target > 0 ? ' / ' + numText(g.target) : '') + unit + '</span></div>' +
+          '<div class="days">' + strip + '</div></div>';
+      }).join('');
+      return '<div class="card" id="sec-' + esc(a.key.replace(/\s+/g, '-').toLowerCase()) + '"><div class="sec-head"><h2>' + a.emoji + ' ' + esc(a.label) + '</h2><span class="sec-pct' + (win ? ' win' : '') + '">' + pctText(pct) + '</span></div>' +
+        (win ? '<div class="cheer-block"><span class="gif" role="img" aria-label="Trophy celebration"></span><div><b>🏆 ' + esc(a.cheer.split('!')[0]) + '!</b>' + esc(a.cheer.split('!').slice(1).join('!').trim() || '90%+ of this week’s targets.') + '</div></div>' : '') +
+        (rows || '<p class="empty">No goals here yet.</p>') +
+        '<button type="button" class="btn btn-ghost add-in-sec" data-act="new-goal" data-area="' + esc(a.key) + '">＋ Add a ' + esc(a.label.toLowerCase()) + ' goal</button></div>';
+    }).join('');
+    $('sections').innerHTML = cards || '<p class="empty">No goals match these filters. Press Clear to see everything.</p>';
+  }
+
+  function renderHeat(M) {
+    const sel = $('heat-area');
+    if (sel.options.length === 1) AREAS.forEach((a) => sel.append(new Option(a.emoji + ' ' + a.label, a.key)));
+    sel.value = S.heatArea;
+    const el = $('heat');
+    const goals = M.goals.filter((g) => !g.once && g.target > 0 && (S.heatArea === 'all' || g.area === S.heatArea))
+      .sort((x, y) => AREAS.indexOf(areaOf(x.area)) - AREAS.indexOf(areaOf(y.area)) || String(x.name).localeCompare(String(y.name)));
+    if (!goals.length) { el.innerHTML = '<p class="empty">No goals with a weekly target here yet.</p>'; return; }
+    const sun = sundayOf(M.t);
+    const wks = [8, 7, 6, 5, 4, 3, 2, 1, 0];
+    let html = '<div class="hgrid" style="grid-template-columns:minmax(10rem,1.8fr) repeat(9,minmax(2.2rem,1fr))"><div></div>' +
+      wks.map((wk) => '<div class="hhead">' + (wk === 0 ? 'This wk' : esc(fmtShort(addDays(sun, -7 * wk)))) + '</div>').join('');
+    for (const g of goals) {
+      const a = areaOf(g.area);
+      html += '<div class="hlabel"><span>' + a.emoji + '</span><span>' + esc(g.name) + '</span></div>';
+      for (const wk of wks) {
+        const done = M.doneOf(g.id, wk);
+        const p = Math.min(done / g.target, 1);
+        const style = done > 0 ? ' style="background:color-mix(in srgb, ' + a.color + ' ' + Math.round(18 + p * 62) + '%, transparent)"' : '';
+        html += '<div class="hcell"' + style + ' data-tip="' + esc((p >= 1 ? '✅ ' : '') + g.name + ': ' + numText(done) + ' / ' + numText(g.target) + (g.unit ? ' ' + g.unit : '')) + '" data-week="' + esc(fmtShort(addDays(sun, -7 * wk))) + '">' + (done > 0 ? numText(done) + (p >= 1 ? ' ✓' : '') : '') + '</div>';
+      }
+    }
+    el.innerHTML = html + '</div><div class="tip" hidden></div>';
+  }
+
+  function renderTrend(M) {
+    const legend = $('legend');
+    if (!legend.childElementCount) {
+      legend.innerHTML = '<span><i class="sw" style="height:4px;background:var(--a-all)"></i>All goals</span>' + AREAS.map((a) => '<span><i class="sw" style="background:' + a.color + '"></i>' + a.emoji + ' ' + esc(a.label) + '</span>').join('');
+    }
+    const el = $('chart');
+    el.innerHTML = '';
+    const seriesList = [...AREAS.map((a) => ({ key: a.key, label: a.emoji + ' ' + a.label, pts: M.areas.find((x) => x.key === a.key).series })), { key: 'All', label: 'All goals', pts: M.all.series }].filter((s) => s.pts.length);
+    if (!seriesList.length) { el.innerHTML = '<p class="empty">Log a few check-ins to see your trend.</p>'; return; }
+    const w = Math.max(300, el.clientWidth);
+    const h = 250;
+    const weeks = M.all.series.map((p) => p.wk);
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('height', h).attr('viewBox', `0 0 ${w} ${h}`).attr('role', 'img').attr('aria-label', 'Share of weekly targets hit over the last 9 weeks');
+    const muted = resolveColor('var(--muted)');
+    const lineCol = resolveColor('var(--line)');
+    const probe = svg.append('text').attr('font-size', 12).text('100%');
+    const tickW = probe.node().getComputedTextLength();
+    probe.remove();
+    const m = { top: 20, right: 14, bottom: 26, left: Math.ceil(tickW) + 12 };
+    const x = d3.scaleLinear([8, 0], [m.left + 8, w - m.right - 8]);
+    const y = d3.scaleLinear([0, 1], [h - m.bottom, m.top]);
+    svg.append('rect').attr('x', m.left).attr('width', w - m.left - m.right).attr('y', y(1)).attr('height', y(WIN) - y(1)).attr('fill', resolveColor('var(--ok)')).attr('opacity', 0.14);
+    svg.append('text').attr('x', m.left + 4).attr('y', y(1) - 5).attr('font-size', 12).attr('fill', resolveColor('var(--ok)')).text('🏆 90%+ zone');
+    for (const tk of [0, 0.25, 0.5, 0.75, 1]) {
+      svg.append('line').attr('x1', m.left).attr('x2', w - m.right).attr('y1', y(tk)).attr('y2', y(tk)).attr('stroke', lineCol);
+      svg.append('text').attr('x', m.left - 8).attr('y', y(tk)).attr('dy', '0.32em').attr('text-anchor', 'end').attr('font-size', 12).attr('fill', muted).text(Math.round(tk * 100) + '%');
+    }
+    const sun = sundayOf(M.t);
+    const step = Math.max(1, Math.ceil((9 * 56) / (w - m.left - m.right)));
+    for (let wk = 8; wk >= 0; wk--) {
+      if (wk !== 0 && (wk % step !== 0 || x(0) - x(wk) < 46)) continue;
+      svg.append('text').attr('x', x(wk)).attr('y', h - 6).attr('text-anchor', wk === 0 ? 'end' : 'middle').attr('font-size', 12).attr('fill', muted).text(wk === 0 ? 'This wk' : fmtShort(addDays(sun, -7 * wk)));
+    }
+    for (const s of [...seriesList.filter((s) => s.key !== 'All'), ...seriesList.filter((s) => s.key === 'All')]) {
+      svg.append('path').datum(s.pts).attr('fill', 'none').attr('stroke', resolveColor(colorVar(s.key))).attr('stroke-width', s.key === 'All' ? 3 : 1.75)
+        .attr('stroke-opacity', s.key === 'All' ? 1 : 0.75).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line((d) => x(d.wk), (d) => y(d.pct)));
+    }
+    for (const p of M.all.series.filter((p) => p.pct >= WIN)) svg.append('text').attr('x', x(p.wk)).attr('y', y(p.pct) - 8).attr('text-anchor', 'middle').attr('font-size', 14).text('🏆');
+    const rule = svg.append('line').attr('y1', m.top).attr('y2', h - m.bottom).attr('stroke', muted).style('display', 'none');
+    const dots = svg.append('g');
+    const tip = document.createElement('div');
+    tip.className = 'tip';
+    tip.hidden = true;
+    el.append(tip);
+    svg.append('rect').attr('x', m.left).attr('y', m.top).attr('width', w - m.left - m.right).attr('height', h - m.top - m.bottom).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px] = d3.pointer(ev);
+        const wk = weeks.reduce((b, k) => (Math.abs(x(k) - px) < Math.abs(x(b) - px) ? k : b), weeks[0]);
+        const cx = x(wk);
+        rule.attr('x1', cx).attr('x2', cx).style('display', null);
+        dots.selectAll('*').remove();
+        const rows = seriesList.map((s) => ({ s, p: s.pts.find((p) => p.wk === wk) })).filter((r) => r.p);
+        rows.forEach((r) => dots.append('circle').attr('cx', cx).attr('cy', y(r.p.pct)).attr('r', r.s.key === 'All' ? 4 : 3).attr('fill', resolveColor(colorVar(r.s.key))));
+        tip.innerHTML = '<div class="h">Week of ' + esc(fmtShort(addDays(sun, -7 * wk))) + (wk === 0 ? ' (so far)' : '') + '</div>' +
+          rows.map((r) => '<div class="r"><i class="sw" style="background:' + colorVar(r.s.key) + '"></i><span>' + esc(r.s.label) + '</span><b>' + pctText(r.p.pct) + (r.p.pct >= WIN ? ' 🏆' : '') + '</b></div>').join('');
+        tip.hidden = false;
+        const tw = tip.offsetWidth;
+        tip.style.left = Math.min(Math.max(0, cx + 12 + tw > w ? cx - tw - 12 : cx + 12), w - tw) + 'px';
+        tip.style.top = m.top + 'px';
+      })
+      .on('pointerleave', () => { rule.style('display', 'none'); dots.selectAll('*').remove(); tip.hidden = true; });
+  }
+
+  function renderConn(M) {
+    const rows = M.goals.filter((g) => g.area === 'Connections' && !g.once).sort((a, b) => (b.daysSince ?? 9999) - (a.daysSince ?? 9999));
+    $('conn').innerHTML = rows.length ? '<table><thead><tr><th>Connection</th><th class="r">Days since</th><th>This week</th><th></th></tr></thead><tbody>' + rows.map((g) => {
+      const flag = g.daysSince == null || g.daysSince > 7;
+      return '<tr class="rowlink" data-act="edit-goal" data-id="' + esc(g.id) + '"><td>' + esc(g.name) + '</td><td class="r ' + (flag ? 'warn' : '') + '">' + (g.daysSince == null ? '—' : g.daysSince) + (flag ? ' ⚠️' : '') + '</td><td>' + esc(g.status) + '</td><td class="chev-td"><span class="chev" aria-hidden="true">›</span></td></tr>';
+    }).join('') + '</tbody></table>' : '<p class="empty">No Friends &amp; family goals yet.</p>';
+  }
+
+  function renderDeadlines(M) {
+    const rows = M.goals.filter((g) => g.targetDate && g.open).sort((a, b) => a.daysLeft - b.daysLeft);
+    $('dl').innerHTML = rows.length ? '<table><thead><tr><th>Goal</th><th>Target date</th><th class="r">Days left</th><th></th></tr></thead><tbody>' + rows.map((g) =>
+      '<tr class="rowlink" data-act="edit-goal" data-id="' + esc(g.id) + '"><td>' + esc(g.name) + '</td><td>' + esc(parseDay(g.targetDate).toLocaleDateString('en', { month: 'short', day: 'numeric', year: 'numeric' })) + '</td><td class="r ' + (g.daysLeft < 14 ? 'warn' : '') + '">' + g.daysLeft + '</td><td class="chev-td"><span class="chev" aria-hidden="true">›</span></td></tr>').join('') +
+      '</tbody></table>' : '<p class="empty">No goals have a target date yet.</p>';
+  }
+
+  function renderArchived() {
+    const wkStart = isoDay(sundayOf(today()));
+    const rows = S.goals.filter((g) => (g.status || 'Active') !== 'Active' || (isOnce(g) && g.doneDay && g.doneDay < wkStart))
+      .sort((a, b) => String(b.doneDay || '').localeCompare(String(a.doneDay || '')));
+    $('archived').hidden = !rows.length;
+    $('arch-list').innerHTML = rows.map((g) => {
+      const done = isOnce(g) && g.doneDay && (g.status || 'Active') === 'Active';
+      const label = done ? 'Done ' + fmtLong(parseDay(g.doneDay)) : g.status;
+      return '<div class="att-row rowlink" data-act="edit-goal" data-id="' + esc(g.id) + '" style="grid-template-columns:2rem 1fr auto"><span>' + (done ? '✅' : g.status === 'Achieved' ? '🏅' : '⏸️') + '</span><div>' + '<button type="button" class="open-btn" data-act="edit-goal" data-id="' + esc(g.id) + '"><b>' + esc(g.name) + '</b></button> <span class="muted small">' + esc(label) + ' · ' + esc(areaOf(g.area).label) + '</span></div>' +
+        '<span class="chev" aria-hidden="true">›</span></div>';
+    }).join('');
+  }
+
+  function celebrate(M) {
+    const wins = new Set(M.areas.filter((a) => a.pct != null && a.pct >= WIN).map((a) => a.key));
+    const met = new Set(M.goals.filter((g) => g.pct !== null && g.pct >= 1).map((g) => g.id));
+    if (S.prevWins) {
+      for (const k of wins) if (!S.prevWins.has(k)) toast('<b>🏆 ' + esc(areaOf(k).label) + ' hit 90%+ this week!</b>', { gif: true, ms: 7000 });
+      for (const id of met) if (!S.prevMet.has(id)) { const g = M.goals.find((x) => x.id === id); if (g) toast('✅ <b>' + esc(g.name) + '</b>' + (g.once ? ' done! 🎉' : ': weekly target met! 🎉')); }
+    }
+    S.prevWins = wins;
+    S.prevMet = met;
+  }
+
+  // ---------- writes ----------
+  async function addCheckin(goalId, day, amount, note) {
+    await S.db.collection('checkins').add({ goalId, day, amount: +amount || 0, note: note || '', createdAt: Date.now() });
+  }
+  async function deleteGoalAndCheckins(id) {
+    const snap = await S.db.collection('checkins').where('goalId', '==', id).get();
+    for (let i = 0; i < snap.docs.length; i += 10) {
+      await Promise.all(snap.docs.slice(i, i + 10).map((d) => S.db.doc('checkins/' + d.id).delete()));
+    }
+    await S.db.doc('goals/' + id).delete();
+  }
+
+  // ---------- goal dialog ----------
+  let editingId = null;
+  let deleteArmed = false;
+  const gdlg = $('goal-dlg');
+  AREAS.forEach((a) => $('g-area').append(new Option(a.emoji + ' ' + a.label, a.key)));
+  function syncKind() {
+    const once = $('g-kind').value === 'once';
+    $('weekly-fields').hidden = once;
+    $('g-done-wrap').hidden = !once;
+    $('g-date-label').textContent = once ? 'Due date' : 'Target date (optional)';
+  }
+  $('g-kind').addEventListener('change', syncKind);
+  function openGoal(id, area) {
+    editingId = id || null;
+    deleteArmed = false;
+    const g = id ? S.goals.find((x) => x.id === id) : null;
+    $('goal-dlg-title').textContent = g ? g.name || 'Goal' : 'New goal';
+    $('g-name').value = g ? g.name || '' : '';
+    $('g-area').value = g ? g.area || 'Chores' : area || 'Chores';
+    $('g-status').value = g ? g.status || 'Active' : 'Active';
+    $('g-kind').value = g && isOnce(g) ? 'once' : 'weekly';
+    $('g-done').checked = !!(g && g.doneDay);
+    $('g-target').value = g && g.target != null ? g.target : '';
+    $('g-unit').value = g ? g.unit || '' : '';
+    $('g-amounts').checked = !!(g && g.amounts);
+    $('g-priority').value = g ? g.priority || '' : '';
+    $('g-date').value = g ? g.targetDate || '' : '';
+    syncKind();
+    $('g-why').value = g ? g.why || '' : '';
+    $('g-delete').hidden = !g;
+    $('g-delete').textContent = 'Delete goal';
+    $('g-err').hidden = true;
+    gdlg.showModal();
+    $('g-name').focus();
+  }
+  $('goal-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const name = $('g-name').value.trim();
+    if (!name) { $('g-err').textContent = 'Give the goal a name.'; $('g-err').hidden = false; return; }
+    const tv = $('g-target').value;
+    const data = {
+      name, area: $('g-area').value, status: $('g-status').value,
+      kind: $('g-kind').value, target: tv === '' ? null : Math.max(0, +tv), unit: $('g-unit').value.trim(), amounts: $('g-amounts').checked,
+      priority: $('g-priority').value, targetDate: $('g-date').value || null, urgent: false,
+      why: $('g-why').value.trim(), example: false,
+    };
+    const prev = editingId ? S.goals.find((x) => x.id === editingId) : null;
+    if (data.kind === 'once') { data.target = null; data.unit = ''; data.amounts = false; data.doneDay = $('g-done').checked ? (prev && prev.doneDay) || isoDay(today()) : null; }
+    else data.doneDay = null;
+    $('g-save').disabled = true;
+    try {
+      if (editingId) await S.db.doc('goals/' + editingId).update(data);
+      else await S.db.collection('goals').add({ ...data, createdAt: Date.now() });
+      gdlg.close();
+      toast(editingId ? '✓ Saved <b>' + esc(name) + '</b>' : '🎯 Added <b>' + esc(name) + '</b>');
+    } catch (e) { showError(e, 'save the goal'); }
+    $('g-save').disabled = false;
+  });
+  $('g-delete').addEventListener('click', async () => {
+    if (!editingId) return;
+    if (!deleteArmed) { deleteArmed = true; $('g-delete').textContent = 'Click again to delete goal and its check-ins'; return; }
+    $('g-delete').disabled = true;
+    const g = S.goals.find((x) => x.id === editingId);
+    try { await deleteGoalAndCheckins(editingId); gdlg.close(); toast('🗑️ Deleted <b>' + esc(g ? g.name : 'goal') + '</b>'); }
+    catch (e) { showError(e, 'delete the goal'); }
+    $('g-delete').disabled = false;
+  });
+
+  // ---------- day dialog ----------
+  const ddlg = $('day-dlg');
+  let dayCtx = null;
+  function openDay(goalId, day) {
+    const g = S.goals.find((x) => x.id === goalId);
+    if (!g) return;
+    dayCtx = { goalId, day };
+    $('day-dlg-title').textContent = areaOf(g.area).emoji + ' ' + g.name + ' · ' + fmtLong(parseDay(day));
+    $('d-amount-label').textContent = 'Amount' + (g.unit ? ' (' + g.unit + ')' : '');
+    $('d-amount').value = '1';
+    $('d-note').value = '';
+    $('d-err').hidden = true;
+    renderDayEntries();
+    ddlg.showModal();
+  }
+  function renderDayEntries() {
+    if (!dayCtx) return;
+    const g = S.goals.find((x) => x.id === dayCtx.goalId) || {};
+    const list = S.checkins.filter((c) => c.goalId === dayCtx.goalId && c.day === dayCtx.day);
+    $('day-entries').innerHTML = list.length ? list.map((c) => '<div class="entry"><span>✅</span><span class="grow"><b class="num">' + numText(c.amount) + '</b> ' + esc(g.unit || '') + (c.note ? ' · ' + esc(c.note) : '') + '</span>' +
+      '<button type="button" class="btn btn-ghost btn-danger" data-act="del-entry" data-cid="' + esc(c.id) + '">Remove</button></div>').join('') : '<p class="empty" style="padding:0">Nothing logged on this day yet.</p>';
+  }
+  $('day-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (!dayCtx) return;
+    const amt = +$('d-amount').value;
+    if (!(amt > 0)) { $('d-err').textContent = 'Enter an amount above 0.'; $('d-err').hidden = false; return; }
+    $('d-add').disabled = true;
+    try { await addCheckin(dayCtx.goalId, dayCtx.day, amt, $('d-note').value.trim()); $('d-note').value = ''; $('d-err').hidden = true; }
+    catch (e) { showError(e, 'save that check-in'); }
+    $('d-add').disabled = false;
+  });
+
+  // ---------- confirm (remove examples) ----------
+  const cdlg = $('confirm-dlg');
+  $('confirm-yes').addEventListener('click', async () => {
+    const ex = S.goals.filter((g) => g.example);
+    $('confirm-yes').disabled = true;
+    try {
+      for (const g of ex) await deleteGoalAndCheckins(g.id);
+      cdlg.close();
+      toast('🧹 Removed ' + ex.length + ' example goals. Time to add your own!');
+    } catch (e) { showError(e, 'remove the examples'); }
+    $('confirm-yes').disabled = false;
+  });
+
+  // ---------- clicks ----------
+  document.addEventListener('click', async (ev) => {
+    if (ev.target.closest('[data-close]')) { ev.target.closest('dialog').close(); return; }
+    if (ev.target.matches('dialog.drawer')) { ev.target.close(); return; }
+    const b = ev.target.closest('[data-act]');
+    if (b && b.classList.contains('rowlink') && ev.target.closest('input, select, textarea, a, label')) return;
+    if (!b || b.disabled) return;
+    const act = b.dataset.act;
+    if (!S.db && act !== 'week-prev' && act !== 'week-next') { toast('⚠️ Saving isn’t available here. Open the tracker on claude.ai while signed in.', { bad: true }); return; }
+    if (act === 'new-goal') openGoal(null, b.dataset.area);
+    else if (act === 'clear-filters') { S.filters.clear(); render(); }
+    else if (act === 'toggle-done') {
+      const g = S.goals.find((x) => x.id === b.dataset.id);
+      if (!g || S.busy.has(g.id)) return;
+      S.busy.add(g.id);
+      b.disabled = true;
+      try { await S.db.doc('goals/' + g.id).update({ doneDay: g.doneDay ? null : isoDay(today()) }); }
+      catch (e) { showError(e, 'update that task'); b.disabled = false; }
+      S.busy.delete(g.id);
+    }
+    else if (act === 'edit-goal') openGoal(b.dataset.id);
+    else if (act === 'week-prev') { S.weekOffset = Math.max(-8, S.weekOffset - 1); render(); }
+    else if (act === 'week-next') { S.weekOffset = Math.min(0, S.weekOffset + 1); render(); }
+    else if (act === 'remove-examples') {
+      const ex = S.goals.filter((g) => g.example);
+      const n = S.checkins.filter((c) => ex.some((g) => g.id === c.goalId)).length;
+      $('confirm-text').textContent = 'This deletes ' + ex.length + ' example goals and their ' + n + ' check-ins. Goals you’ve edited or added stay.';
+      cdlg.showModal();
+    } else if (act === 'del-entry') {
+      b.disabled = true;
+      try { await S.db.doc('checkins/' + b.dataset.cid).delete(); } catch (e) { showError(e, 'remove that check-in'); b.disabled = false; }
+    } else if (act === 'day') {
+      const { id, day } = b.dataset;
+      const g = S.goals.find((x) => x.id === id);
+      const has = S.checkins.some((c) => c.goalId === id && c.day === day);
+      if (has || (g && g.amounts)) { openDay(id, day); return; }
+      const key = id + '|' + day;
+      if (S.busy.has(key)) return;
+      S.busy.add(key);
+      b.classList.add('on');
+      try { await addCheckin(id, day, 1, ''); } catch (e) { b.classList.remove('on'); showError(e, 'tick that off'); }
+      S.busy.delete(key);
+    }
+  });
+  document.querySelectorAll('.fchip').forEach((c) => c.addEventListener('click', () => {
+    const f = c.dataset.filter;
+    if (S.filters.has(f)) S.filters.delete(f); else S.filters.add(f);
+    render();
+  }));
+  $('heat-area').addEventListener('change', (ev) => { S.heatArea = ev.target.value; render(); });
+  $('heat').addEventListener('pointermove', (ev) => {
+    const tip = $('heat').querySelector('.tip');
+    if (!tip) return;
+    const c = ev.target.closest('.hcell');
+    if (!c || !c.dataset.tip) { tip.hidden = true; return; }
+    tip.innerHTML = '<div class="h">Week of ' + esc(c.dataset.week) + '</div><div>' + esc(c.dataset.tip) + '</div>';
+    tip.hidden = false;
+    const box = $('heat').getBoundingClientRect();
+    const cr = c.getBoundingClientRect();
+    tip.style.left = Math.min(Math.max(0, cr.left - box.left + $('heat').scrollLeft + cr.width / 2 - tip.offsetWidth / 2), $('heat').scrollWidth - tip.offsetWidth) + 'px';
+    tip.style.top = Math.max(0, cr.top - box.top - tip.offsetHeight - 6) + 'px';
+  });
+  $('heat').addEventListener('pointerleave', () => { const tip = $('heat').querySelector('.tip'); if (tip) tip.hidden = true; });
+  let rT;
+  window.addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(render, 150); });
+  new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // ---------- data ----------
+  render();
+  (async () => {
+    const note = $('status-note');
+    let db = null;
+    try { db = window.claude && window.claude.use ? await window.claude.use('db') : null; } catch (e) { db = null; }
+    if (!db) {
+      note.innerHTML = '⚠️ Your saved goals can’t load in this view. Connect your GitHub data (the prompt on this page) to see and change them.';
+      note.hidden = false;
+      $('summary').textContent = 'Your goals can’t be loaded here.';
+      return;
+    }
+    S.db = db;
+    const timer = setTimeout(() => { note.innerHTML = '⏳ Can’t reach your saved goals yet. They’ll appear as soon as the connection returns.'; note.hidden = false; }, 10000);
+    const settle = () => { if (S.goalsReady && S.ckReady) { clearTimeout(timer); note.hidden = true; } };
+    const onErr = (e) => {
+      clearTimeout(timer);
+      note.innerHTML = e && e.code === 'revoked' ? '⚠️ Access to this tracker changed. Reload the page to continue.' : '⚠️ Your goals stopped updating. Reload the page to reconnect.';
+      note.hidden = false;
+    };
+    db.collection('goals').onSnapshot((snap) => {
+      S.goals = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (!snap.metadata.fromCache) S.goalsReady = true;
+      settle();
+      render();
+    }, onErr);
+    const cutoff = isoDay(addDays(sundayOf(today()), -7 * 12));
+    db.collection('checkins').where('day', '>=', cutoff).orderBy('day').onSnapshot((snap) => {
+      S.checkins = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (!snap.metadata.fromCache) S.ckReady = true;
+      settle();
+      render();
+      if (ddlg.open) renderDayEntries();
+    }, onErr);
+  })();
+})();
+</script>
+</body>
+</html>

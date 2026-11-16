@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-wLRQ9fpg/8sGzOMETNtnfD6YoS/QdVkZE6fLFBfTnQ0='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+<script src="../../shared/aib-store.js" data-app="writing" data-home="../../" data-title="Writing"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Writing</title>
+<link rel="stylesheet" href="../../vendor/fonts/desk-fonts.css">
+<style>
+/* Layout idea: an editor's desk. Prompt engine on a single column; once a prompt is chosen,
+   a 70/30 split (side panel adjustable to 40 or 50%): manuscript page on the left, a research + editor's-notes rail on the right.
+   Accent is the editor's blue pencil; red is reserved for "cut" marks. */
+:root{
+  --paper:#f5f6f8;
+  --surface:#ffffff;
+  --ink:#1a202b;
+  --muted:#5b6474;
+  --rule:#dce0e7;
+  --pencil:#2a57c0;
+  --pencil-soft:#e6ecfa;
+  --cut:#b3261e;
+  --cut-soft:#fbe9e7;
+  --keep:#1f7a4d;
+  --keep-soft:#e5f3eb;
+  --warn:#8a5a00;
+  --warn-soft:#fdf2dc;
+  --font-display:"Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-ui:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --r:8px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#11141a; --surface:#181d25; --ink:#e5e8ee; --muted:#9aa3b2; --rule:#2a313c;
+    --pencil:#86a6ff; --pencil-soft:#1d2840; --cut:#ff8a80; --cut-soft:#3a1d1b;
+    --keep:#6fd19c; --keep-soft:#163024; --warn:#f0c46a; --warn-soft:#352a12;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#11141a; --surface:#181d25; --ink:#e5e8ee; --muted:#9aa3b2; --rule:#2a313c;
+  --pencil:#86a6ff; --pencil-soft:#1d2840; --cut:#ff8a80; --cut-soft:#3a1d1b;
+  --keep:#6fd19c; --keep-soft:#163024; --warn:#f0c46a; --warn-soft:#352a12;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--font-ui);font-size:15px;line-height:1.5;display:flex;flex-direction:column}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--pencil);outline-offset:2px}
+a{color:var(--pencil)}
+h1,h2,h3{text-wrap:balance}
+
+/* header */
+.top{display:flex;align-items:center;gap:16px;padding:10px 20px;border-bottom:1px solid var(--rule);background:var(--surface);flex:0 0 auto}
+.brand{font-family:var(--font-display);font-size:22px;font-weight:600;letter-spacing:-.01em;margin:0}
+.brand small{font-family:var(--font-ui);font-size:12px;color:var(--muted);font-weight:400;margin-left:8px;letter-spacing:0}
+.top nav{display:flex;gap:4px;margin-left:auto}
+.tab{border:1px solid transparent;background:none;padding:6px 12px;border-radius:999px;cursor:pointer;color:var(--muted)}
+.tab[aria-current="true"]{background:var(--pencil-soft);color:var(--pencil);border-color:transparent;font-weight:500}
+.tab:disabled{opacity:.4;cursor:default}
+.status{font-size:12px;color:var(--muted);white-space:nowrap}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--rule);background:var(--surface);padding:7px 14px;border-radius:var(--r);cursor:pointer;font-weight:500}
+.btn:hover{border-color:var(--pencil)}
+.btn.primary{background:var(--pencil);border-color:var(--pencil);color:#fff}
+:root[data-theme="dark"] .btn.primary{color:#0b1020}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .btn.primary{color:#0b1020}}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn.ghost{border-color:transparent;background:none;color:var(--pencil)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.danger{color:var(--cut)}
+
+/* views */
+main{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.view{display:none;min-height:0;flex:1 1 auto}
+.view.on{display:flex}
+
+/* ---------- prompt engine ---------- */
+#v-prompts{overflow:auto;flex-direction:column}
+.engine{display:none}
+.home{max-width:1080px;margin:0 auto;width:100%;padding:24px 20px 40px;display:flex;flex-direction:column;gap:28px}
+.home > section.options,.home > section.drafts{padding:0;max-width:none}
+.home h2{font-family:var(--font-display);font-size:24px;font-weight:600;margin:0 0 12px}
+.home .sub{margin:-6px 0 12px}
+.newp{padding:24px 24px 18px}
+.newp .lede{max-width:64ch}
+.newp .actions{margin-top:16px}
+.btn.big{padding:10px 20px;font-size:15px}
+.steps{display:flex;gap:6px;list-style:none;margin:0 0 14px;padding:0;font-size:13px;color:var(--muted);flex-wrap:wrap}
+.steps li{display:flex;align-items:center;gap:6px;padding:3px 10px 3px 4px;border-radius:999px;background:var(--paper)}
+.steps li span{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;border:1px solid var(--rule);font-size:11px;font-weight:600}
+.steps li.on{color:var(--pencil);background:var(--pencil-soft);font-weight:500}
+.steps li.on span{background:var(--pencil);color:#fff;border-color:var(--pencil)}
+.steps li.done span{background:var(--keep-soft);color:var(--keep);border-color:transparent}
+.formsref{margin-top:18px;border-top:1px solid var(--rule);padding-top:12px}
+.formsref > summary{cursor:pointer;font-weight:500;color:var(--pencil);font-size:14px}
+.formsref #forms{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:4px 24px;margin-top:10px}
+.cont{border-left:4px solid var(--pencil);padding:18px 22px}
+.cont.urgent{border-left-color:var(--cut)}
+.cont .kicker{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pencil);font-weight:600;margin-bottom:6px}
+.cont.urgent .kicker{color:var(--cut)}
+.crow{display:flex;gap:20px;align-items:center;flex-wrap:wrap}
+.crow .ct{flex:1;min-width:220px}
+.crow h2{margin:0 0 4px}
+.crow .hint{margin:0}
+.cstat{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.panel{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:20px}
+.panel h2{font-family:var(--font-display);font-size:22px;margin:0 0 4px;font-weight:600}
+.panel .lede{color:var(--muted);margin:0 0 16px;font-size:14px}
+.cats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:18px}
+.cat{border:1px solid var(--rule);border-radius:var(--r);padding:10px;text-align:left;background:var(--paper);cursor:pointer;display:flex;flex-direction:column;gap:2px;min-height:76px}
+.cat b{font-weight:600;font-size:14px;line-height:1.25}
+.cat span{font-size:12px;color:var(--muted);line-height:1.3}
+.cat[aria-pressed="true"]{border-color:var(--pencil);background:var(--pencil-soft);box-shadow:inset 0 0 0 1px var(--pencil)}
+.fields{display:grid;gap:12px}
+.field label{display:block;font-size:13px;font-weight:500;margin-bottom:4px}
+.field label em{font-style:normal;color:var(--muted);font-weight:400}
+.field input,.field textarea,.field select{width:100%;border:1px solid var(--rule);border-radius:var(--r);background:var(--paper);padding:8px 10px}
+.field textarea{resize:vertical;min-height:64px}
+.row3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden}
+.seg button{border:0;background:var(--paper);padding:7px 12px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--pencil);color:#fff}
+:root[data-theme="dark"] .seg button[aria-pressed="true"]{color:#0b1020}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:#0b1020}}
+.actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.hint{font-size:12px;color:var(--muted)}
+
+/* format spec */
+.spec h3{font-family:var(--font-display);font-size:24px;margin:2px 0 4px;font-weight:600}
+.spec .kicker{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--pencil);font-weight:600}
+.spec p{margin:0 0 12px;font-family:var(--font-body);font-size:16px;max-width:62ch}
+.spec dl{display:grid;grid-template-columns:minmax(110px,max-content) 1fr;gap:6px 14px;margin:0 0 14px;font-size:14px}
+.spec dt{color:var(--muted)}
+.spec dd{margin:0}
+.spec ol{margin:0 0 12px;padding-left:20px;font-size:14px}
+.spec ol li{margin-bottom:4px}
+.spec ol li b{font-weight:600}
+.spec .h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;font-weight:600}
+.spec ul{margin:0;padding-left:18px;font-size:14px}
+.spec ul li{margin-bottom:4px}
+
+/* prompt options */
+.options{max-width:1240px;margin:0 auto;width:100%;padding:16px 20px 8px}
+.options h2{font-family:var(--font-display);font-size:22px;margin:0 0 10px;font-weight:600}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--rule);border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:10px}
+.card .meta{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--pencil-soft);color:var(--pencil)}
+.chip.alt{background:var(--paper);color:var(--muted);border:1px solid var(--rule)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.keep{background:var(--keep-soft);color:var(--keep)}
+.chip.cut{background:var(--cut-soft);color:var(--cut)}
+.card h3{font-family:var(--font-display);font-size:20px;margin:0;font-weight:600;line-height:1.25}
+.card .q{font-family:var(--font-body);font-size:16px;margin:0}
+.card .why{font-size:13px;color:var(--muted);margin:0}
+.card .why b{color:var(--ink);font-weight:500}
+.card .go{margin-top:auto}
+.empty{border:1px dashed var(--rule);border-radius:12px;padding:20px;color:var(--muted);font-size:14px;background:var(--surface)}
+.drafts{max-width:1240px;margin:0 auto;width:100%;padding:16px 20px 32px}
+.drafts h2{font-family:var(--font-display);font-size:20px;margin:0 0 10px;font-weight:600}
+.dlist{display:grid;gap:8px}
+.drow{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--rule);border-radius:var(--r);padding:10px 14px}
+.drow .t{flex:1;min-width:0}
+.drow .t b{display:block;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drow .t span{font-size:12px;color:var(--muted)}
+.num{font-variant-numeric:tabular-nums}
+
+/* loading */
+.loading{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:14px;padding:14px 0}
+.dots{display:inline-flex;gap:4px}
+.dots i{width:6px;height:6px;border-radius:50%;background:var(--pencil);animation:blip 1s infinite ease-in-out}
+.dots i:nth-child(2){animation-delay:.15s}.dots i:nth-child(3){animation-delay:.3s}
+@keyframes blip{0%,80%,100%{opacity:.25}40%{opacity:1}}
+@media (prefers-reduced-motion: reduce){.dots i{animation:none;opacity:.7}}
+.err{background:var(--cut-soft);color:var(--cut);border-radius:var(--r);padding:10px 12px;font-size:14px}
+.note{background:var(--warn-soft);color:var(--warn);border-radius:var(--r);padding:10px 12px;font-size:13px}
+
+/* ---------- workspace (70/30 by default; side panel 30/40/50%) ---------- */
+.rtabs{flex-wrap:wrap;align-items:center;row-gap:6px}
+.rtabs .tab{white-space:nowrap}
+.once{white-space:nowrap}
+.railw{margin-left:auto;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.railw .seg button{padding:3px 8px;font-size:12px}
+#v-write{display:none;min-height:0}
+#v-write.on{display:grid;grid-template-columns:minmax(0,1fr) var(--rail,30%);flex:1 1 auto}
+.left{display:flex;flex-direction:column;min-height:0;border-right:1px solid var(--rule)}
+.brief{padding:12px 20px;border-bottom:1px solid var(--rule);background:var(--surface);display:flex;gap:12px;align-items:flex-start}
+.brief .bt{flex:1;min-width:0}
+.brief .bt .meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:4px}
+.brief p{margin:0;font-family:var(--font-body);font-size:15px}
+.brief.collapsed p{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.toolbar{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:8px 20px;border-bottom:1px solid var(--rule);background:var(--surface)}
+.toolbar .sep{width:1px;height:22px;background:var(--rule);margin:0 4px}
+.tb{border:1px solid transparent;background:none;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:13px;min-width:32px}
+.tb:hover{background:var(--paper);border-color:var(--rule)}
+.tb b,.tb i,.tb u{font-family:var(--font-body);font-size:15px}
+.scroller{flex:1 1 auto;overflow:auto;padding:28px 20px 60px}
+/* Book-like measure: roughly 65-75 characters a line at any text size and panel width */
+:root{--pagew:calc(var(--ed-size,18px) * 34 + 112px)}
+.page{max-width:min(100%, var(--pagew));margin:0 auto;background:var(--surface);border:1px solid var(--rule);border-radius:4px;padding:48px 56px;min-height:70vh;box-shadow:0 1px 0 var(--rule)}
+#editor{outline:none;font-family:var(--font-body);font-size:var(--ed-size,18px);line-height:1.7;min-height:50vh}
+.fsize{display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--muted)}
+.fsize select{border:1px solid var(--rule);border-radius:6px;background:var(--surface);padding:3px 6px;font-size:13px}
+#editor:empty::before{content:"Start writing…";color:var(--muted)}
+#editor h1{font-family:var(--font-display);font-size:1.9em;line-height:1.15;margin:0 0 18px;font-weight:600}
+#editor h2{font-family:var(--font-display);font-size:1.4em;line-height:1.25;margin:28px 0 8px;font-weight:600}
+#editor h3{font-family:var(--font-ui);font-size:.83em;letter-spacing:.06em;text-transform:uppercase;margin:24px 0 6px;font-weight:600}
+#editor p{margin:0 0 14px}
+#editor blockquote{margin:16px 0;padding:2px 0 2px 18px;border-left:3px solid var(--pencil);color:var(--muted);font-style:italic}
+#editor p.break{text-align:center;letter-spacing:.6em;color:var(--muted)}
+#editor ul,#editor ol{margin:0 0 14px;padding-left:26px}
+.cite{color:var(--pencil);background:var(--pencil-soft);border-radius:3px;padding:0 3px;font-size:.92em;cursor:default;white-space:nowrap}
+sup.cite{font-size:.7em;padding:0 2px}
+.refs{max-width:min(100%, var(--pagew));margin:18px auto 0;font-family:var(--font-body);font-size:15px;padding:0 56px}
+.refs h2{font-family:var(--font-display);font-size:20px;margin:18px 0 8px;font-weight:600}
+.refs ol,.refs ul{padding-left:22px;margin:0}
+.refs li{margin-bottom:6px;overflow-wrap:anywhere}
+.refs .hang{list-style:none;padding-left:0}
+.refs .hang li{padding-left:2em;text-indent:-2em}
+.foot{display:flex;align-items:center;gap:16px;padding:8px 20px;border-top:1px solid var(--rule);background:var(--surface);font-size:13px;color:var(--muted);flex-wrap:wrap}
+.wcount{display:flex;flex-direction:column;line-height:1.25}
+.wcount #wc{color:var(--ink);font-weight:600;font-size:14px}
+.fbtns{display:flex;gap:8px;margin-left:auto}
+details.menu{position:relative}
+details.menu > summary{list-style:none}
+details.menu > summary::-webkit-details-marker{display:none}
+details.menu > summary::after{content:"";border:4px solid transparent;border-top-color:currentColor;margin-left:2px;transform:translateY(2px)}
+details.menu .mlist{position:absolute;right:0;bottom:calc(100% + 6px);z-index:5;min-width:250px;background:var(--surface);border:1px solid var(--rule);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:6px;display:flex;flex-direction:column}
+.mi{border:0;background:none;text-align:left;padding:8px 10px;border-radius:6px;cursor:pointer;font-weight:500;display:flex;flex-direction:column;gap:1px;color:var(--ink)}
+.mi:hover,.mi:focus-visible{background:var(--paper)}
+.mi small{font-weight:400;color:var(--muted);font-size:12px}
+.mi.danger{color:var(--cut)}
+.mi[hidden]{display:none}
+.meter{flex:1;min-width:160px;height:6px;background:var(--paper);border:1px solid var(--rule);border-radius:999px;position:relative;overflow:hidden}
+.meter i{position:absolute;left:0;top:0;bottom:0;background:var(--pencil);border-radius:999px}
+.meter b{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--cut)}
+
+.right{display:flex;flex-direction:column;min-height:0;background:var(--surface)}
+.rtabs{display:flex;gap:2px;padding:8px 12px;border-bottom:1px solid var(--rule)}
+.rtabs .tab{font-size:13px}
+.rbody{flex:1 1 auto;overflow:auto;padding:18px 20px 40px}
+.rpane{display:none}
+.rpane.on{display:block}
+.sec{margin-bottom:22px}
+.sec h3{font-family:var(--font-display);font-size:18px;margin:0 0 8px;font-weight:600;display:flex;align-items:center;gap:8px}
+.sec h3{flex-wrap:wrap}
+.btn,.chip{white-space:nowrap}
+.sec p{margin:0 0 8px;font-size:14px}
+.sec ul{margin:0;padding-left:18px;font-size:14px}
+.sec li{margin-bottom:6px}
+.src{color:var(--muted);font-size:12px}
+.facts{display:grid;gap:8px}
+.fact{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;font-size:14px;background:var(--paper)}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.stat{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;background:var(--paper)}
+.stat .v{font-family:var(--font-display);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat .l{font-size:13px}
+.rhead{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.rhead .grow{flex:1}
+
+/* notes */
+.verdict{font-family:var(--font-display);font-size:20px;line-height:1.35;margin:0 0 8px}
+.std{border:1px solid var(--rule);border-radius:var(--r);padding:12px;margin-bottom:10px;border-left-width:4px}
+.std.strong{border-left-color:var(--keep)}
+.std.mixed{border-left-color:var(--warn)}
+.std.weak{border-left-color:var(--cut)}
+.std h4{margin:0 0 6px;font-size:14px;display:flex;gap:8px;align-items:center}
+.std p{margin:0 0 6px;font-size:14px}
+.quote{font-family:var(--font-body);font-style:italic;border-left:2px solid var(--rule);padding-left:10px;margin:6px 0;font-size:14px}
+.better{font-family:var(--font-body);font-size:14px;background:var(--keep-soft);border-radius:6px;padding:6px 10px;margin:6px 0 0}
+.mark{border-radius:var(--r);padding:10px 12px;margin-bottom:8px;font-size:14px}
+.mark.keep{background:var(--keep-soft)}
+.mark.cut{background:var(--cut-soft)}
+.mark .quote{border-left-color:currentColor}
+
+/* citations */
+.srcrow{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;background:var(--paper)}
+.srcrow .ref{font-family:var(--font-body);font-size:14px;margin:0 0 8px;overflow-wrap:anywhere}
+.srcrow .ctl{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.srcrow input[type=text]{width:90px;border:1px solid var(--rule);border-radius:6px;padding:3px 8px;background:var(--surface);font-size:13px}
+.form2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form2 .wide{grid-column:1/-1}
+details.add{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;margin-bottom:14px}
+details.add summary{cursor:pointer;font-weight:500}
+
+/* countdown */
+.timer{font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;padding:3px 10px;border-radius:999px;background:var(--pencil-soft);color:var(--pencil);white-space:nowrap;align-self:center}
+.timer:empty{display:none}
+.timer.warm{background:var(--warn-soft);color:var(--warn)}
+.timer.hot,.timer.over{background:var(--cut-soft);color:var(--cut)}
+
+/* countdown panel */
+.tchip{display:inline-flex;align-items:center;gap:4px;color:var(--muted)}
+.ic{width:15px;height:15px;vertical-align:-3px;flex:0 0 auto}
+.ic.lg{width:26px;height:26px}
+.clock{padding:8px 20px 6px;border-bottom:1px solid var(--rule);background:var(--surface);--tone:var(--pencil);--tone-soft:var(--pencil-soft)}
+.clock.m-warm{--tone:var(--warn);--tone-soft:var(--warn-soft)}
+.clock.m-hot,.clock.m-over,.clock.m-arch{--tone:var(--cut);--tone-soft:var(--cut-soft)}
+.clock.m-done{--tone:var(--keep);--tone-soft:var(--keep-soft)}
+.cmain{display:grid;grid-template-columns:minmax(220px,auto) 1fr;gap:12px 18px;align-items:stretch}
+.cbig{display:flex;gap:12px;align-items:center;background:var(--tone-soft);color:var(--tone);border-radius:10px;padding:10px 16px}
+.cbig .lbl{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.dig{font-family:var(--font-ui);font-size:30px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.01em}
+.dig small,.adig small{font-size:.5em;font-weight:500;margin-left:1px;opacity:.8}
+.cbig .xs{color:var(--ink);opacity:.75}
+.xs{font-size:12.5px;color:var(--muted);line-height:1.4}
+.xrow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.xcard{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--rule);border-radius:10px;padding:10px 12px;background:var(--paper);color:var(--muted)}
+.xcard b{color:var(--ink);font-size:14px}
+.xcard .xs{margin-top:4px;display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.xcard.ready{border-color:var(--pencil);background:var(--pencil-soft);color:var(--pencil)}
+.xcard.used{color:var(--keep)} .xcard.used .xs{color:var(--keep);font-weight:600;flex-direction:row;gap:4px}
+.xcard.missed,.xcard.gone{opacity:.65}
+.xcard.earn,.xcard.soon{color:var(--warn)}
+.once{font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;border:1px solid currentColor;border-radius:999px;padding:0 6px;margin-left:4px;opacity:.8}
+.mini{display:block;width:100%;max-width:220px;height:6px;border-radius:999px;background:var(--rule);overflow:hidden}
+.mini i{display:block;height:100%;background:var(--pencil);border-radius:999px}
+.mini.red i{background:var(--cut)}
+.apanel{grid-column:1/-1;display:flex;gap:12px;align-items:center;border-radius:10px;padding:10px 16px;background:var(--cut);color:#fff}
+.apanel .xs{color:#fff;opacity:.9}
+.apanel .mini{background:rgba(255,255,255,.3)} .apanel .mini i{background:#fff}
+.apanel.paused{background:var(--warn-soft);color:var(--warn)} .apanel.paused .xs{color:var(--ink)} .apanel.paused .mini{background:var(--rule)} .apanel.paused .mini i{background:var(--warn)}
+.apanel.fin{background:var(--pencil-soft);color:var(--pencil)} .apanel.fin .xs{color:var(--ink)} .apanel.fin .mini{background:var(--rule)} .apanel.fin .mini i{background:var(--pencil)}
+.adig{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.tl{margin-top:2px}
+.chead{display:flex;align-items:center;gap:14px;flex-wrap:wrap;cursor:pointer;border-radius:8px;padding:4px 4px 2px;margin:0 -4px}
+.chead:hover{background:var(--paper)}
+.cpill{display:inline-flex;align-items:center;gap:8px;background:var(--tone-soft);color:var(--tone);border-radius:999px;padding:4px 14px 4px 10px}
+.cpill .ic{width:18px;height:18px}
+.cpill .lbl{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.hleft{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.due{font-size:14px;color:var(--ink);display:inline-flex;align-items:center;gap:6px}
+.due .ic{width:15px;height:15px;color:var(--muted)}
+.harch{font-size:13px;font-weight:600;color:var(--cut);display:inline-flex;gap:6px;align-items:center}
+.harch:empty{display:none}
+.harch .ic{width:15px;height:15px}
+.chint{margin-left:auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;color:var(--pencil);font-weight:500}
+.chint .chev{width:16px;height:16px;transition:transform .15s}
+.clock.open .chint .chev{transform:rotate(180deg)}
+@media (prefers-reduced-motion: reduce){.chint .chev{transition:none}}
+/* Pressure: contrast and position escalate as time runs down */
+.chead > *{order:3}
+.chead .cpill{order:1}
+.chead .xbtns{order:4;display:inline-flex;gap:6px}
+.chead .xbtns:empty{display:none}
+.chead .chint{order:99}
+.clock.m-run .cpill{background:var(--paper);color:var(--muted)}
+.clock.m-run .hleft{color:var(--ink)}
+.clock.m-warm .chead{background:var(--warn-soft)}
+.clock.m-warm .due b{color:var(--warn)}
+.clock.m-hot,.clock.m-over,.clock.m-arch{box-shadow:inset 4px 0 0 var(--cut)}
+.clock.m-hot .chead,.clock.m-over .chead,.clock.m-arch .chead{background:var(--cut-soft)}
+.clock.m-hot .cpill,.clock.m-over .cpill{background:var(--cut);color:#fff}
+.clock.m-hot .hleft,.clock.m-over .hleft{font-size:22px}
+.clock.m-hot .xbtns{order:2}
+.clock.m-hot .due b{color:var(--cut)}
+.clock.m-arch .harch{order:0;background:var(--cut);color:#fff;padding:5px 12px;border-radius:999px;font-size:14px}
+.clock.m-arch .cpill{background:transparent;color:var(--cut);padding-left:0}
+.xbtn{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--pencil);background:var(--pencil);color:#fff;font-weight:600;font-size:13px;padding:4px 12px;border-radius:999px;cursor:pointer;animation:softpulse 2.6s ease-in-out infinite}
+.xbtn .ic{width:15px;height:15px}
+.xbtn:hover{filter:brightness(1.08)}
+.clock.m-hot .xbtn{background:#fff;color:var(--cut);border-color:var(--cut);--pulse:rgba(179,38,30,.28)}
+@keyframes softpulse{0%,100%{box-shadow:0 0 0 0 var(--pulse,rgba(42,87,192,.30))}50%{box-shadow:0 0 0 7px rgba(0,0,0,0)}}
+@media (prefers-reduced-motion: reduce){.xbtn{animation:none;box-shadow:0 0 0 3px var(--pulse,rgba(42,87,192,.25))}}
+.cbody{display:flex;flex-direction:column;gap:10px;padding:2px 0 6px}
+.cbody[hidden]{display:none}
+.clock:not(.open) .tbar{margin-bottom:6px}
+.clock:not(.open) .tbar .day{display:none}
+.tbar{position:relative;height:14px;margin:26px 10px 20px;border-radius:999px;background:var(--paper);border:1px solid var(--rule)}
+.tbar .day{position:absolute;top:100%;transform:translateX(-50%);font-size:10px;color:var(--muted);padding-top:4px;font-variant-numeric:tabular-nums}
+.tbar .day{white-space:nowrap}
+.tbar .dtick{position:absolute;top:0;bottom:0;width:1px;background:var(--rule)}
+.tbar .seg{position:absolute;top:0;bottom:0;left:0;border-radius:999px}
+.tbar .win{background:var(--pencil-soft)}
+.tbar .ext{background:repeating-linear-gradient(45deg,var(--pencil-soft) 0 4px,var(--surface) 4px 7px)}
+.tbar .arc{background:repeating-linear-gradient(45deg,var(--cut-soft) 0 4px,var(--cut) 4px 6px)}
+.tbar .el{background:var(--tone);opacity:.6}
+.pin{position:absolute;bottom:12px;transform:translateX(-50%);color:var(--ink);display:flex;flex-direction:column;align-items:center}
+.pin::after{content:"";width:2px;height:8px;background:currentColor;margin-top:1px}
+.pin .ic{width:16px;height:16px}
+.pin{background:var(--surface);border-radius:4px;padding:0 1px}
+.pin.red{color:var(--cut)} .pin.amber{color:var(--warn)}
+.nowmk{position:absolute;top:-4px;width:14px;height:16px;margin-left:-7px;border-radius:4px;background:var(--surface);border:3px solid var(--tone)}
+.tlegend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink);margin-top:4px}
+.tlegend .ic{width:15px;height:15px;vertical-align:-3px}
+.tlegend .sw{display:inline-block;width:11px;height:11px;border-radius:3px;border:3px solid var(--tone);vertical-align:-1px}
+.meta{margin-top:6px}
+@media (max-width:1000px){ .cmain{grid-template-columns:1fr} }
+@media (max-width:560px){ .xrow{grid-template-columns:1fr} .dig{font-size:26px} }
+.timer.arch{background:var(--cut);color:#fff}
+.lockbar{max-width:1240px;margin:12px auto 0;width:calc(100% - 40px);background:var(--cut-soft);color:var(--cut);border-radius:var(--r);padding:10px 14px;font-size:14px}
+#draftBanner{margin:0;width:auto;border-radius:0;max-width:none}
+.left.locked .page{opacity:.55}
+.left.locked .toolbar{pointer-events:none;opacity:.4}
+.drow.gated{opacity:.45}
+.drow .state{font-size:11px}
+.modal{position:fixed;inset:0;background:rgba(10,12,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.modal[hidden]{display:none}
+.mbox{background:var(--surface);border-radius:12px;max-width:520px;width:100%;padding:22px;border:1px solid var(--rule)}
+.mbox h2{font-family:var(--font-display);font-size:22px;margin:0 0 8px}
+.mbox p{margin:0 0 12px;font-size:14px}
+.mbox .actions{justify-content:flex-end}
+.hist{border:1px solid var(--rule);border-radius:var(--r);padding:10px 12px;margin-bottom:8px;font-size:14px;background:var(--paper)}
+
+/* five forms + draw */
+details.form{border-top:1px solid var(--rule);padding:10px 0}
+details.form:first-child{border-top:0}
+details.form summary{cursor:pointer;display:flex;flex-direction:column;gap:2px;list-style:none}
+details.form summary::-webkit-details-marker{display:none}
+details.form summary b{font-family:var(--font-display);font-size:18px;font-weight:600}
+details.form summary span{font-size:12px;color:var(--muted)}
+details.form summary::after{content:"Show format";font-size:12px;color:var(--pencil)}
+details.form[open] summary::after{content:"Hide format"}
+details.form .spec{padding-top:10px}
+details.form .spec .kicker{display:none}
+details.form .spec h3{display:none}
+.draw{display:flex;gap:6px;flex-wrap:wrap;align-items:center;min-height:0}
+.draw .chip{text-transform:none;letter-spacing:0;font-weight:500}
+
+/* illustrations */
+.art{display:grid;gap:10px;margin-bottom:22px}
+.art figure{margin:0;border:1px solid var(--rule);border-radius:var(--r);overflow:hidden;background:var(--paper)}
+.art .frame{aspect-ratio:8/5;display:block;width:100%}
+.art .frame svg{width:100%;height:100%;display:block}
+.art figcaption{display:flex;gap:8px;align-items:center;padding:8px 10px;font-size:13px;color:var(--muted);border-top:1px solid var(--rule)}
+.art figcaption span{flex:1}
+.paused *{animation-play-state:paused !important}
+.thumb{width:112px;flex:0 0 112px;aspect-ratio:8/5;border-radius:6px;overflow:hidden;border:1px solid var(--rule);background:var(--paper)}
+.thumb:empty{display:none}
+.thumb svg{width:100%;height:100%;display:block}
+
+/* dialog (in-page) */
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:8px 14px;border-radius:999px;font-size:13px;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+
+@media (max-width: 1000px){
+  .engine{grid-template-columns:1fr}
+  .cats{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .cards{grid-template-columns:1fr}
+  #v-write.on{grid-template-columns:1fr;grid-template-rows:auto;overflow:auto}
+  .left{border-right:0;border-bottom:1px solid var(--rule)}
+  .scroller{overflow:visible}
+  .rbody{overflow:visible}
+}
+@media (max-width: 560px){
+  .cats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .row3{grid-template-columns:1fr}
+  .page{padding:28px 20px}
+  .refs{padding:0 4px}
+  .top{flex-wrap:wrap}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-hourglass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12M6 22h12M7 2c0 5 10 6 10 10S7 17 7 22M17 2c0 5-10 6-10 10s10 5 10 10"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-plusclock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.5 13A8.5 8.5 0 1 1 11 3.5"/><path d="M11 7v5l3 2M19 2v6M16 5h6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 22V3M5 4h12l-2 4 2 4H5"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="5" rx="1"/><path d="M5 8v12h14V8M10 12h4"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-start" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M7 4v16l13-8z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12l5 5L20 6"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13 7l4 4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+</svg>
+<header class="top">
+  <h1 class="brand">Writing<small>prompts, drafts and an editor's eye</small></h1>
+  <nav aria-label="Views">
+    <button class="tab" id="nav-prompts" aria-current="true">Prompts</button>
+    <button class="tab" id="nav-write" aria-current="false" disabled>Write</button>
+  </nav>
+  <span class="status" id="saveStatus" hidden>Not saved yet</span>
+</header>
+
+<main>
+<!-- ================= PROMPT ENGINE ================= -->
+<section class="view on" id="v-prompts" aria-label="Prompt engine">
+  <div class="home">
+    <div id="continueBox"></div>
+    <div class="lockbar" id="lockBanner" hidden></div>
+
+    <section class="panel newp" aria-labelledby="newH">
+      <ol class="steps" id="steps" aria-label="Progress">
+        <li class="on"><span>1</span>Set the scene</li><li><span>2</span>Pick a prompt</li><li><span>3</span>Write</li>
+      </ol>
+      <h2 id="newH">Start a new piece</h2>
+      <p class="lede">Give a situation, a place and a feeling. Claude returns three prompts, each in a randomly drawn form and topic source, so you can choose across forms.</p>
+      <div class="row3">
+        <div class="field"><label for="in-sit">Situation</label><input id="in-sit" type="text" autocomplete="off" placeholder="e.g. the last night shift before a ward closes"></div>
+        <div class="field"><label for="in-loc">Location</label><input id="in-loc" type="text" autocomplete="off" placeholder="e.g. Hamilton, Ontario"></div>
+        <div class="field"><label for="in-emo">Emotion</label><input id="in-emo" type="text" autocomplete="off" placeholder="e.g. guilty relief"></div>
+      </div>
+      <div class="actions">
+        <button class="btn primary big" id="genBtn">Generate 3 prompts</button>
+        <button class="btn ghost" id="exampleBtn">Fill an example</button>
+        <span class="hint" id="aiHint"></span>
+      </div>
+      <div class="draw" id="drawBox" aria-live="polite"></div>
+      <details class="formsref">
+        <summary>The five forms and what each finished piece must look like</summary>
+        <div id="forms"></div>
+      </details>
+    </section>
+
+    <section class="options" id="optSec" hidden aria-labelledby="optH">
+      <h2 id="optH">Pick a prompt</h2>
+      <div id="optBox"></div>
+    </section>
+
+    <section class="drafts" aria-labelledby="draftsH">
+      <h2 id="draftsH">Your drafts</h2>
+      <div class="dlist" id="draftList"><div class="hint">Loading your drafts…</div></div>
+    </section>
+    <section class="drafts" aria-labelledby="archH">
+      <h2 id="archH">Prompt archive</h2>
+      <p class="hint sub">Deleted drafts of more than 300 words leave their prompt and a four-sentence summary here.</p>
+      <div class="dlist" id="archList"></div>
+    </section>
+  </div>
+</section>
+
+<!-- ================= WORKSPACE ================= -->
+<section class="view" id="v-write" aria-label="Writing workspace">
+  <div class="left">
+    <div class="brief collapsed" id="brief">
+      <div class="thumb" id="briefArt" aria-hidden="true"></div>
+      <div class="bt">
+        <div class="meta" id="briefMeta"></div>
+        <p id="briefText"></p>
+      </div>
+      <button class="btn small ghost" id="briefToggle" aria-expanded="false">Show full prompt</button>
+    </div>
+    <div class="clock" id="clock" aria-live="off"></div>
+    <div class="lockbar" id="draftBanner" hidden></div>
+    <div class="toolbar" role="toolbar" aria-label="Formatting">
+      <button class="tb" data-block="P" title="Paragraph">¶</button>
+      <button class="tb" data-block="H1" title="Title">H1</button>
+      <button class="tb" data-block="H2" title="Section heading">H2</button>
+      <button class="tb" data-block="H3" title="Subheading">H3</button>
+      <button class="tb" data-block="BLOCKQUOTE" title="Block quote">“ ”</button>
+      <span class="sep"></span>
+      <button class="tb" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+      <button class="tb" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+      <button class="tb" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+      <span class="sep"></span>
+      <button class="tb" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+      <button class="tb" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+      <button class="tb" id="breakBtn" title="Section or scene break">* * *</button>
+      <span class="sep"></span>
+      <button class="tb" id="citeQuick" title="Insert a citation">Cite</button>
+      <span class="sep"></span>
+      <label class="fsize" for="fontSize">Text size
+        <select id="fontSize">
+          <option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18" selected>18</option>
+          <option value="20">20</option><option value="22">22</option><option value="24">24</option><option value="28">28</option>
+        </select>
+      </label>
+      <button class="tb" data-cmd="undo" title="Undo">↶</button>
+      <button class="tb" data-cmd="redo" title="Redo">↷</button>
+    </div>
+    <div class="scroller" id="scroller">
+      <article class="page"><div id="editor" contenteditable="true" spellcheck="true" aria-label="Manuscript"></div></article>
+      <div class="refs" id="refs"></div>
+    </div>
+    <div class="foot">
+      <div class="wcount"><span class="num" id="wc">0 words</span><span id="target"></span></div>
+      <div class="meter" title="Progress toward the form's word range; red tick marks 1,000 words (editor's notes start)"><i id="meterFill"></i><b id="meterTick"></b></div>
+      <div class="fbtns">
+        <details class="menu" id="exportMenu"><summary class="btn small">Export</summary>
+          <div class="mlist" role="menu">
+            <button class="mi" id="copyBtn" role="menuitem">Copy as text</button>
+            <button class="mi" id="dlDocx" role="menuitem" hidden>Download Word (.docx)</button>
+            <button class="mi" id="dlMd" role="menuitem" hidden>Download Markdown (.md)</button>
+          </div></details>
+        <details class="menu up" id="draftMenu"><summary class="btn small">Draft</summary>
+          <div class="mlist" role="menu">
+            <button class="mi" id="completeBtn" role="menuitem">Complete draft<small>Finish and make read-only</small></button>
+            <button class="mi" id="restartBtn" role="menuitem">Restart draft<small>Clear text and analysis, reset clocks</small></button>
+            <button class="mi danger" id="deleteBtn" role="menuitem">Delete draft<small>Erase; prompt kept in archive if 300+ words</small></button>
+          </div></details>
+      </div>
+    </div>
+  </div>
+
+  <aside class="right" aria-label="Research and notes">
+    <div class="rtabs" role="tablist">
+      <button class="tab" data-pane="research" aria-current="true">Research</button>
+      <button class="tab" data-pane="notes" aria-current="false" title="Editor's notes">Notes</button>
+      <button class="tab" data-pane="cites" aria-current="false">Citations</button>
+      <button class="tab" data-pane="ink" aria-current="false" title="Ink illustrations">Ink</button>
+      <button class="tab" data-pane="format" aria-current="false">Format</button>
+      <span class="railw">Panel <span class="seg" role="group" aria-label="Side panel width"><button data-rail="30">30%</button><button data-rail="40">40%</button><button data-rail="50">50%</button></span></span>
+    </div>
+    <div class="rbody">
+      <div class="rpane on" id="p-research"><div id="resBox"></div></div>
+      <div class="rpane" id="p-ink"><div id="artBox"></div></div>
+      <div class="rpane" id="p-notes"></div>
+      <div class="rpane" id="p-cites"></div>
+      <div class="rpane spec" id="p-format"></div>
+    </div>
+  </aside>
+</section>
+</main>
+<div class="toast" id="toast" role="status"></div>
+<div class="modal" id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="mbox" id="mbox"></div></div>
+
+<script src="../../vendor/js/jszip-3.10.1.min.js"></script>
+<script>
+/* =====================================================================
+   Category formats — the formal shape of each finished piece
+   ===================================================================== */
+const CATS = {
+  cnf:{
+    name:"Creative non-fiction", tag:"True story, literary craft", cite:"chicago", range:[1500,5000],
+    what:"A true story told with the tools of fiction: scene, character, dialogue and reflection. Covers the personal essay, memoir, literary journalism and the lyric essay. Everything on the page must have happened.",
+    facts:[["Voice","First person is typical; the narrator is a real person, usually the writer."],["Truth standard","No invented events, people or quotes. Compressed timelines or composite characters are disclosed in an author's note."],["Citations","Chicago Manual of Style (17th ed.), notes and bibliography, used sparingly."],["Length","1,500 to 5,000 words for a magazine personal essay."]],
+    structure:[["Title and optional dek","A title that names an image or tension, with a one-line subtitle if needed."],["Opening scene","Drop the reader into one specific moment, with sensory detail."],["Woven context","Backstory arrives in pieces, when the reader needs it, not in a block up front."],["Braided reflection","Move between the narrator then (inside the event) and now (understanding it)."],["The turn","A realization, reversal or admission the piece has been building toward."],["Closing image","End on something concrete that resonates rather than a summary or moral."]],
+    rules:["Section breaks are a centred * * * on their own line.","Reconstructed dialogue is acceptable when faithful to what was said.","Real names may need permission or changing; say so in the author's note."],
+    skeleton:["<h1>Title</h1>","<p><em>Subtitle or dek</em></p>","<p>Opening scene…</p>","<p class=\"break\">* * *</p>","<p>Reflection…</p>"]
+  },
+  fic:{
+    name:"Creative fiction", tag:"Invented story", cite:"none", range:[1500,7500],
+    what:"An invented narrative: the short story or flash fiction. Meaning comes from character under pressure, and from the story's shape as much as its content.",
+    facts:[["Manuscript format","Standard (Shunn) manuscript: name and contact top left, word count top right, title centred a third of the way down, 12-pt serif, double-spaced, half-inch paragraph indents."],["Point of view","One POV and one tense, held consistently unless a shift is deliberate."],["Citations","None in the text. Epigraphs are credited to their author."],["Length","Flash: under 1,000 words. Short story: 1,500 to 7,500."]],
+    structure:[["Hook","Establish a character, a want and a place in the first paragraph."],["Inciting incident","The event that makes this day different from every other."],["Complications","Obstacles that escalate and close off easy exits."],["Crisis and choice","The character must choose; the choice reveals who they are."],["Resolution","A closed ending, or an open one that still feels earned."]],
+    rules:["Scene breaks are marked with a centred # (shown here as * * *).","Show interior life through action, gesture and subtext before stating it.","Dialogue tags: prefer \"said\"; let the lines carry the emotion."],
+    skeleton:["<h1>Title</h1>","<p>Opening paragraph…</p>","<p class=\"break\">* * *</p>","<p>Next scene…</p>"]
+  },
+  edi:{
+    name:"Editorial", tag:"Argued opinion", cite:"ap", range:[600,900],
+    what:"An argued opinion on a current public question: a signed op-ed or an unsigned house editorial. One clear claim, defended with evidence, aimed at changing a reader's mind or prompting action.",
+    facts:[["Style","AP style. Short paragraphs of one to three sentences."],["Attribution","Sources named in the sentence (\"according to Statistics Canada…\") with links, not footnotes."],["Disclosure","State any conflict of interest."],["Length","600 to 900 words for a newspaper op-ed; 1,200 to 2,500 for long-form magazine opinion."]],
+    structure:[["Headline","States the claim, not just the topic."],["Dek","One sentence that sharpens the headline."],["Lede with a news peg","Why this matters this week."],["Thesis","Your position, stated plainly by the second or third paragraph."],["Two or three arguments","Each anchored in a fact, figure or example."],["Counterargument","The strongest opposing view, stated fairly, then answered."],["Kicker","A concrete call to action or consequence."]],
+    rules:["One argument per piece; cut tangents.","Numbers need a source and a year.","Avoid hedging words that weaken the claim (\"arguably\", \"perhaps\")."],
+    skeleton:["<h1>Headline that states the claim</h1>","<p><em>Dek: one sentence that sharpens it.</em></p>","<p>Lede with the news peg…</p>","<p>Thesis…</p>","<p>Argument one…</p>","<p>Argument two…</p>","<p>The other side, and why it falls short…</p>","<p>Kicker…</p>"]
+  },
+  ess:{
+    name:"Essay", tag:"Academic argument", cite:"mla", range:[1500,3000],
+    what:"An argumentative or analytical essay that advances a debatable thesis and supports it with evidence and analysis, in a formal academic register.",
+    facts:[["Register","Formal; third person unless the essay is reflective. Present tense when discussing texts."],["Citations","MLA 9th edition: in-text (Author page) with a Works Cited list. APA or Chicago if your discipline requires."],["Format","Header with name, instructor, course and date; title centred; double-spaced; 1-inch margins."],["Length","1,500 to 3,000 words."]],
+    structure:[["Title","Signals the argument, not only the subject."],["Introduction","Context, a narrowing of the question, and a debatable thesis as its last sentence."],["Body paragraphs","Point, Evidence, Explanation, Link: one claim per paragraph."],["Counterargument","Acknowledge the strongest objection and respond to it."],["Conclusion","Answer \"so what?\": extend the argument rather than repeat it."],["Works Cited","Every source cited in the text, alphabetical, hanging indent."]],
+    rules:["Every factual claim needs a citation.","Quotations are introduced, cited and then analysed.","Avoid the five-paragraph template when the argument needs more room."],
+    skeleton:["<h1>Title</h1>","<h2>Introduction</h2>","<p>Context… Thesis.</p>","<h2>First claim</h2>","<p></p>","<h2>Second claim</h2>","<p></p>","<h2>Counterargument</h2>","<p></p>","<h2>Conclusion</h2>","<p></p>"]
+  },
+  res:{
+    name:"Research", tag:"Evidence-led report", cite:"apa", range:[3000,8000],
+    what:"A report of original or secondary research that answers a defined question, following the IMRaD structure used in the sciences and social sciences.",
+    facts:[["Citations","APA 7th edition: (Author, Year) in text, a References list with DOIs where available."],["Tense","Past tense for methods and results; present for established findings and implications."],["Figures and tables","Numbered, titled, and referred to in the text."],["Length","3,000 to 8,000 words, plus a 150 to 250 word abstract."]],
+    structure:[["Title","Specific: names variables, population or setting."],["Abstract","150 to 250 words: question, method, key result, implication."],["Introduction","Literature review that ends in a gap and a research question or hypothesis."],["Methods","Enough detail that someone could repeat the work."],["Results","Findings without interpretation."],["Discussion","Interpretation, limitations, and what comes next."],["Conclusion and References","The answer to the question; every cited work listed."]],
+    rules:["APA heading levels: Level 1 centred bold, Level 2 flush-left bold.","Separate what you found from what it means.","State limitations before a reviewer does."],
+    skeleton:["<h1>Title</h1>","<h2>Abstract</h2>","<p></p>","<h2>Introduction</h2>","<p></p>","<h2>Methods</h2>","<p></p>","<h2>Results</h2>","<p></p>","<h2>Discussion</h2>","<p></p>","<h2>Conclusion</h2>","<p></p>"]
+  }
+};
+const CAT_KEYS = ["cnf","fic","edi","ess","res"];
+const CITE_STYLES = {apa:"APA 7", mla:"MLA 9", chicago:"Chicago 17 (notes)", ap:"AP attribution", none:"None"};
+
+/* =====================================================================
+   The editorial framework (from the project chat "Building an editorial
+   framework from literary masters")
+   ===================================================================== */
+const FRAMEWORK = `You are an executive editor (WSJ, The Atlantic, The New Yorker, FT, The Sun). Canon: Baldwin, Tolstoy, Christie, Murakami, Dostoyevsky, Morrison, Hughes, Sartre.
+Standard (through-lines): interior is the battlefield; language is architecture; the marginalized are the moral centre; truth over comfort; voice is irreducible; time is psychological.
+Ask: interior life weighted or summarized? language earned or loose? moral weight? writer in the room or at a distance? voice earned or borrowed? truth or comfort?
+Discipline: RESTRAINT (name what works and must not be touched, incl. deliberate "errors"); RUTHLESSNESS (cut loved lines that don't serve). Canon is a compass, not a court: for editorial/essay/research judge reader-service and format first. Quote the draft; show concrete rewrites. State confidence; end with self-critique.`;
+
+/* =====================================================================
+   State and helpers
+   ===================================================================== */
+const $ = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
+const hashText = s => { let x = 5381; for (let i = 0; i < s.length; i++) x = ((x << 5) + x + s.charCodeAt(i)) | 0; return x; };
+const uid = () => "d" + Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+const today = () => new Date().toLocaleDateString("en-CA",{year:"numeric",month:"long",day:"numeric"});
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("on"); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove("on"),2200); }
+const loadingHTML = msg => `<div class="loading"><span class="dots"><i></i><i></i><i></i></span>${esc(msg)}</div>`;
+
+const ui = { options:[], generating:false };
+let draft = null;          // current draft object
+let sampleFn = null;       // Claude
+let store = null;          // persistence
+let storeKind = "browser";
+let autoNotesDone = false;
+let lastRange = null;
+
+/* ---------- Claude ---------- */
+function aiError(e){
+  if (!e) return "Something went wrong.";
+  if (e.code === "not_granted") return "Claude isn't enabled for this page in your current view.";
+  if (e.code === "rate_limited") return "Claude is rate-limited right now. Wait a minute and try again.";
+  return e.message || String(e);
+}
+function parseJSONText(t){
+  t = String(t||"").trim().replace(/^```(?:json)?/i,"").replace(/```$/,"").trim();
+  const a = t.indexOf("{"), b = t.lastIndexOf("}");
+  if (a >= 0 && b > a) t = t.slice(a, b+1);
+  return JSON.parse(t);
+}
+async function askJSON(input, tier){
+  if (!sampleFn) throw {code:"unavailable", message:"Claude isn't available in this view. You can still write, cite and save."};
+  const opts = { modelTier: tier || "default" };
+  if (typeof sampleFn.json === "function"){
+    try { return await sampleFn.json(input, opts); }
+    catch(e){ if (e && (e.code === "not_granted" || e.code === "rate_limited")) throw e; }
+  }
+  const r = await sampleFn(input, opts);
+  return parseJSONText(r.text);
+}
+
+/* ---------- persistence ---------- */
+const localStore = {
+  _all(){ try { return JSON.parse(localStorage.getItem("promptdesk.drafts")||"{}"); } catch { return {}; } },
+  _save(o){ try { localStorage.setItem("promptdesk.drafts", JSON.stringify(o)); return true; } catch { return false; } },
+  async list(){ return Object.values(this._all()).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0)).slice(0,30); },
+  async get(id){ return this._all()[id] || null; },
+  async put(d){ const o=this._all(); o[d.id]=d; if(!this._save(o)) throw new Error("Browser storage unavailable"); },
+  async del(id){ const o=this._all(); delete o[id]; this._save(o); },
+  async archList(){ try { return JSON.parse(localStorage.getItem("promptdesk.archive")||"[]"); } catch { return []; } },
+  async archPut(a){ const l = await this.archList(); l.unshift(a); try { localStorage.setItem("promptdesk.archive", JSON.stringify(l.slice(0,200))); } catch {} }
+};
+function dbStore(db, userId){
+  const col = db.collection("data/users/" + userId);
+  const arch = db.doc("data/users/" + userId + "/meta").collection("archive");
+  return {
+    async list(){ const s = await col.orderBy("updatedAt","desc").limit(30).get(); return s.docs.map(d=>d.data()).filter(Boolean); },
+    async get(id){ const s = await col.doc(id).get(); return s.exists ? JSON.parse(JSON.stringify(s.data())) : null; },
+    async put(d){ await col.doc(d.id).set(JSON.parse(JSON.stringify(d))); },
+    async del(id){ await col.doc(id).delete(); },
+    async archList(){ const s = await arch.orderBy("archivedAt","desc").limit(200).get(); return s.docs.map(d=>d.data()).filter(Boolean); },
+    async archPut(a){ await arch.doc(a.id).set(JSON.parse(JSON.stringify(a))); }
+  };
+}
+store = localStore;
+async function initPlatform(){
+  if (!(window.claude && typeof window.claude.use === "function")) { setAIHint(); return; }
+  claude.use("sample").then(s => { sampleFn = s; setAIHint(); }).catch(()=>setAIHint());
+  claude.use("downloads").then(d => { downloadsApi = d; if (d){ $("#dlDocx").hidden = false; $("#dlMd").hidden = false; } }).catch(()=>{});
+  try{
+    const [db, user] = await Promise.all([claude.use("db"), claude.use("user")]);
+    const id = user && typeof user.id === "function" ? await user.id() : null;
+    if (db && id){ store = dbStore(db, id); storeKind = "account"; }
+  }catch(e){ /* stay on browser storage */ }
+}
+function setAIHint(){
+  $("#aiHint").textContent = sampleFn ? "" : "Claude isn't connected in this view: you can still use your own prompt and the editor.";
+  $("#genBtn").disabled = !sampleFn;
+}
+
+let saveTimer=null, saving=false, saveAgain=false;
+function scheduleSave(){ if(!draft) return; $("#saveStatus").textContent="Unsaved changes"; clearTimeout(saveTimer); saveTimer=setTimeout(saveNow, 1200); }
+async function saveNow(){
+  if (!draft) return;
+  if (saving){ saveAgain=true; return; }
+  saving=true;
+  draft.html = $("#editor").innerHTML;
+  draft.words = wordCount();
+  draft.title = titleFromDoc();
+  draft.updatedAt = Date.now();
+  try{
+    await store.put(draft);
+    $("#saveStatus").textContent = (storeKind==="account" ? "Saved to your account · " : "Saved in this browser · ") + new Date().toLocaleTimeString([], {hour:"numeric",minute:"2-digit"});
+  }catch(e){
+    if (storeKind==="account"){ try{ await localStore.put(draft); $("#saveStatus").textContent="Saved in this browser (account save failed)"; }catch{ $("#saveStatus").textContent="Not saved: copy your draft"; } }
+    else $("#saveStatus").textContent="Not saved: copy your draft";
+  }
+  saving=false;
+  if (saveAgain){ saveAgain=false; saveNow(); }
+}
+
+/* =====================================================================
+   Prompt engine
+   ===================================================================== */
+function specHTML(k){
+  const c = CATS[k];
+  return `<div class="kicker">Format of the finished piece</div>
+  <h3>${esc(c.name)}</h3>
+  <p>${esc(c.what)}</p>
+  <dl>${c.facts.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join("")}</dl>
+  <div class="h4">Required structure</div>
+  <ol>${c.structure.map(([a,b])=>`<li><b>${esc(a)}.</b> ${esc(b)}</li>`).join("")}</ol>
+  <div class="h4">House rules</div>
+  <ul>${c.rules.map(r=>`<li>${esc(r)}</li>`).join("")}</ul>`;
+}
+function renderSpec(el, k){ el.innerHTML = specHTML(k); }
+
+function renderForms(){
+  $("#forms").innerHTML = CAT_KEYS.map(k => `<details class="form"><summary><b>${esc(CATS[k].name)}</b><span>${esc(CATS[k].tag)} · ${CATS[k].range[0].toLocaleString()}–${CATS[k].range[1].toLocaleString()} words · ${esc(CITE_STYLES[CATS[k].cite])}</span></summary><div class="spec">${specHTML(k)}</div></details>`).join("");
+}
+const shuffle = a => { a = a.slice(); for (let i = a.length-1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]] = [a[j],a[i]]; } return a; };
+// Three different forms, and a mix of hot and random topic sources (never all the same).
+function drawSlots(){
+  const cats = shuffle(CAT_KEYS).slice(0,3);
+  let modes = cats.map(() => Math.random() < .5 ? "hot" : "random");
+  if (modes.every(m => m === modes[0])) modes[Math.floor(Math.random()*3)] = modes[0]==="hot" ? "random" : "hot";
+  const kinds = shuffle(["question","brief", Math.random()<.5?"question":"brief"]);
+  return cats.map((c,i) => ({category:c, mode:modes[i], kind:kinds[i]}));
+}
+function renderDraw(slots){
+  $("#drawBox").innerHTML = `<span class="hint">This draw:</span> ` + slots.map((s,i)=>`<span class="chip alt">${i+1}. ${esc(CATS[s.category].name)} · ${s.mode==="hot"?"hot topic":"random topic"} · ${s.kind}</span>`).join(" ");
+}
+const EXAMPLES = [
+  ["a family deciding whether to sell the farmhouse","Prince Edward County, Ontario","reluctant hope"],
+  ["the last night shift before a hospital wing closes","Hamilton, Ontario","guilty relief"],
+  ["a first winter after immigrating","Winnipeg, Manitoba","stubborn wonder"],
+  ["a city council vote on a bike lane","Toronto, Ontario","frustration"],
+  ["a fisherman's daughter taking over the boat","Lunenburg, Nova Scotia","pride and dread"]
+];
+function fillExample(){ const e = EXAMPLES[Math.floor(Math.random()*EXAMPLES.length)]; $("#in-sit").value=e[0]; $("#in-loc").value=e[1]; $("#in-emo").value=e[2]; }
+
+async function generate(){
+  const pl = promptLock(); if (pl){ toast(pl); return; }
+  const sit=$("#in-sit").value.trim(), loc=$("#in-loc").value.trim(), emo=$("#in-emo").value.trim();
+  if (!sit && !loc && !emo){ $("#optBox").innerHTML = `<div class="err">Add at least one of situation, location or emotion so the prompts have something to work from.</div>`; return; }
+  const slots = drawSlots(); renderDraw(slots);
+  $("#optSec").hidden = false; setStep(2); $("#optSec").scrollIntoView({behavior: reduceMotion() ? "auto" : "smooth", block:"start"});
+  ui.generating = true; $("#genBtn").disabled = true;
+  $("#optBox").innerHTML = loadingHTML("Claude is drafting three prompts…");
+  const slotText = slots.map((s,i) => { const c = CATS[s.category]; return `${i+1}. ${c.name} [${c.structure.map(x=>x[0]).join(">")}; ${c.range[0]}-${c.range[1]}w] | ${s.mode==="hot" ? "HOT: real current public issue tied to location; asOf=month/year" : "RANDOM: surprising real subject linked to inputs"} | ${s.kind==="question" ? "a question" : "a brief (directive)"}`; }).join("\n");
+  const ask = `Writing prompts. Date ${today()}. Situation: ${sit||"-"}; location: ${loc||"-"}; emotion (the engine, not a label): ${emo||"-"}.
+One prompt per line spec, in order, distinct angles:
+${slotText}
+JSON only: {"prompts":[{"title":"3-7 words","workingHeadline":"","prompt":"1-3 sentences","topic":"few words","angle":"1 sentence","whyNow":"1 sentence","asOf":"","wordTarget":0}]}`;
+  try{
+    const res = await askJSON(ask, "default");
+    const list = (res && res.prompts) || [];
+    if (!list.length) throw new Error("Claude returned no prompts. Try again.");
+    ui.options = list.slice(0,3).map((p,i) => ({...p, kind:slots[i].kind, category:slots[i].category, inputs:{situation:sit, location:loc, emotion:emo, mode:slots[i].mode}}));
+    renderOptions();
+  }catch(e){
+    $("#optBox").innerHTML = `<div class="err">${esc(aiError(e))}</div>`;
+  }
+  ui.generating = false; $("#genBtn").disabled = !sampleFn;
+}
+function setStep(n){ $$("#steps li").forEach((li,i) => { li.classList.toggle("on", i === n-1); li.classList.toggle("done", i < n-1); }); }
+function renderOptions(){
+  if (!ui.options.length) return;
+  $("#optBox").innerHTML = `<div class="cards">${ui.options.map((p,i)=>`
+    <article class="card">
+      <div class="meta"><span class="chip">${p.kind==="question"?"Question":"Brief"}</span><span class="chip alt">${esc(CATS[p.category].name)}</span>${p.inputs.mode==="hot"?`<span class="chip warn">Hot topic${p.asOf?" · "+esc(p.asOf):""}</span>`:`<span class="chip alt">Random topic</span>`}</div>
+      <h3>${esc(p.title)}</h3>
+      <p class="q">${esc(p.prompt)}</p>
+      <p class="why"><b>Topic:</b> ${esc(p.topic)}</p>
+      <p class="why"><b>Angle:</b> ${esc(p.angle)}</p>
+      <p class="why"><b>Why now:</b> ${esc(p.whyNow)}</p>
+      <p class="why"><b>Format:</b> ${esc(CATS[p.category].structure.map(s=>s[0]).join(" → "))}. ${esc(CITE_STYLES[CATS[p.category].cite])} citations; target <span class="num">${Number(p.wordTarget)||CATS[p.category].range[0]}</span> words.</p>
+      <button class="btn primary go" data-i="${i}">Write this piece</button>
+    </article>`).join("")}</div>
+    <div class="actions" style="margin-top:12px"><button class="btn small" id="rerollBtn">Draw three new forms</button><span class="hint">Hot topics come from Claude's knowledge, which has a cutoff. Check that the issue is still current before you publish.</span></div>`;
+  $("#rerollBtn").onclick = generate;
+  $$("#optBox .go").forEach(b => b.onclick = () => startDraft(ui.options[+b.dataset.i]));
+}
+/* ---------- drafts list + archive ---------- */
+let drafts = {};   // id -> draft (as last loaded/saved)
+async function loadDrafts(){ let l = []; try { l = await store.list(); } catch {} drafts = {}; l.forEach(d => { drafts[d.id] = d; if (!(draft && draft.id === d.id) && resetClocks(d)) store.put(d).catch(()=>{}); }); if (draft && resetClocks(draft)) scheduleSave(); }
+async function renderDrafts(){
+  await loadDrafts();
+  const box = $("#draftList"), now = Date.now();
+  const list = allList().sort((a,b) => (b.updatedAt||0) - (a.updatedAt||0));
+  if (!list.length){ box.innerHTML = `<div class="hint">No drafts yet. Your drafts are saved ${storeKind==="account"?"to your account":"in this browser"} as you write.</div>`; }
+  else box.innerHTML = list.map(d => {
+    const s = stateOf(d, now), L = lockInfo(d, now);
+    const chip = s==="complete" ? `<span class="chip keep state">Complete</span>` : s==="closed" ? `<span class="chip cut state">Closed</span>` : s==="decide" ? `<span class="chip cut state">Decide</span>` : `<span class="tchip">${ic(d.arch && !d.arch.met ? "archive" : "hourglass")}<span class="timer" data-deadline="${deadlineOf(d)}"></span></span>`;
+    return `<div class="drow ${L.gated?"gated":""}">
+    <div class="t"><b>${esc(titleOf(d))}</b><span>${esc(CATS[d.category]?.name||"")} · <span class="num">${(d.words||0).toLocaleString()}</span> words · ${Math.floor((now-startOf(d))/HR)}h since start</span></div>
+    ${chip}
+    <button class="btn small" data-open="${esc(d.id)}" ${L.gated?"disabled":""}>Open</button>
+    ${s==="closed" ? `<button class="btn small" data-act="complete" data-id="${esc(d.id)}">Complete</button><button class="btn small" data-act="restart" data-id="${esc(d.id)}">Restart</button>` : ""}
+    ${L.gated ? "" : `<button class="btn small ghost danger" data-act="delete" data-id="${esc(d.id)}">Delete</button>`}</div>`; }).join("");
+  const cur = list.find(d => !d.complete && !lockInfo(d, now).gated);
+  $("#continueBox").innerHTML = cur ? (() => {
+    const c = CATS[cur.category] || {range:[0,0], name:""}, s = stateOf(cur, now), urgent = s === "expired" || s === "decide" || deadlineOf(cur) - now < 6*HR;
+    return `<section class="panel cont ${urgent ? "urgent" : ""}" aria-labelledby="contH">
+      <div class="kicker">Pick up where you left off</div>
+      <div class="crow">
+        <div class="ct"><h2 id="contH">${esc(titleOf(cur))}</h2>
+          <p class="hint">${esc(c.name)} · <span class="num">${(cur.words||0).toLocaleString()}</span> of ${c.range[0].toLocaleString()}–${c.range[1].toLocaleString()} words · Day ${Math.min(7, Math.floor((now - startOf(cur)) / 86400e3) + 1)} of 7</p></div>
+        <div class="cstat">${s === "finishing" || s === "finished300" ? `<span class="chip">Finishing round</span>` : `<span class="tchip">${ic(cur.arch && !cur.arch.met ? "archive" : "hourglass")}<span class="timer" data-deadline="${deadlineOf(cur)}"></span></span><span class="hint">Due ${when(deadlineOf(cur))}</span>`}</div>
+        <button class="btn primary big" data-open="${esc(cur.id)}">Continue writing</button>
+      </div></section>`; })() : "";
+  tickTimers();
+  $$("[data-open]").forEach(b => b.onclick = () => openDraft(b.dataset.open));
+  $$("#draftList [data-act]").forEach(b => b.onclick = () => armed(b, () => act(b.dataset.act, getD(b.dataset.id))));
+  renderArchive();
+  applyLocks();
+}
+// Two-step confirm for destructive buttons (the page can't use confirm()).
+function armed(b, fn){
+  if (b.dataset.armed){ delete b.dataset.armed; fn(); return; }
+  const t = b.textContent; b.dataset.armed = "1"; b.textContent = "Confirm " + t.toLowerCase();
+  setTimeout(() => { if (b.isConnected && b.dataset.armed){ delete b.dataset.armed; b.textContent = t; } }, 4000);
+}
+async function renderArchive(){
+  let l = []; try { l = await store.archList(); } catch {}
+  const lock = promptLock();
+  $("#archList").innerHTML = l.length ? l.map((a,i) => `<div class="drow" style="align-items:flex-start">
+    <div class="t"><b>${esc(a.prompt?.title || "Prompt")}</b><span>${esc(CATS[a.category]?.name||"")} · ${a.words||0} words when deleted · ${new Date(a.archivedAt).toLocaleDateString()}</span>
+    <p class="q" style="margin:6px 0 0;font-family:var(--font-body);font-size:15px">${esc(a.prompt?.prompt||"")}</p>
+    ${a.summary ? `<p class="hint" style="margin:6px 0 0;white-space:normal">${esc(a.summary)}</p>` : ""}</div>
+    <button class="btn small" data-reopen="${i}" ${lock?"disabled":""}>New draft</button></div>`).join("")
+    : `<div class="hint">Nothing archived yet.</div>`;
+  $$("[data-reopen]").forEach(b => b.onclick = () => { const a = l[+b.dataset.reopen]; startDraft({...a.prompt, category:a.category}); });
+}
+
+/* =====================================================================
+   Workspace
+   ===================================================================== */
+function showView(v){
+  $("#v-prompts").classList.toggle("on", v==="prompts");
+  $("#v-write").classList.toggle("on", v==="write");
+  $("#nav-prompts").setAttribute("aria-current", v==="prompts");
+  $("#nav-write").setAttribute("aria-current", v==="write");
+  try { history.replaceState(null, "", v==="write" && draft ? "#" + draft.id : "#prompts"); } catch {}
+  $("#saveStatus").hidden = v !== "write";
+  if (v==="prompts") renderDrafts();
+}
+/* ---------- 72-hour countdown ---------- */
+const H72 = 72*3600*1000;
+const TIMER_LAUNCH = Date.parse("2026-11-11T19:46:00Z"); // drafts that existed before timers start their clock here
+const deadlineOf = d => d.deadline || (Math.max(d.createdAt || 0, TIMER_LAUNCH) + H72);
+function fmtLeft(ms){
+  const neg = ms < 0, s = Math.floor(Math.abs(ms)/1000), hh = Math.floor(s/3600), mm = Math.floor(s%3600/60), ss = s%60;
+  const t = `${hh}h ${String(mm).padStart(2,"0")}m ${String(ss).padStart(2,"0")}s`;
+  return neg ? `Time's up · ${t} over` : `${t} left`;
+}
+function tickTimers(){
+  const now = Date.now();
+  $$("[data-deadline]").forEach(el => {
+    const left = +el.dataset.deadline - now;
+    el.textContent = fmtLeft(left);
+    el.className = "timer " + (left < 0 ? "over" : left < 6*3600e3 ? "hot" : left < 24*3600e3 ? "warm" : "");
+  });
+}
+
+/* ---------- countdown rules ----------
+   72h base · +12h once if 1,500 words while more than 10h left · +36h once below 10h (6h if +12 used)
+   zero → 12h archive countdown: 300 words → +6h and pause; +3h per further 200 words until 15h+ left
+   archive countdown runs out → draft deleted · one week since start → complete / restart / delete */
+const HR = 3600e3, WEEK = 168*HR;
+const ARCH_LAUNCH = Date.parse("2026-11-14T22:23:00Z"); // drafts already at zero when these rules shipped start their archive countdown here
+const startOf = d => d.startAt || d.createdAt || Date.now();
+const titleOf = d => d.title || d.prompt?.title || "Untitled";
+const getD = id => (draft && draft.id === id) ? draft : drafts[id];
+const isOpen = d => !!(draft && d && draft.id === d.id && $("#v-write").classList.contains("on"));
+const wordsOf = d => isOpen(d) ? wordCount() : (d.words || 0);
+function allList(){ const m = {...drafts}; if (draft) m[draft.id] = draft; return Object.values(m); }
+function stateOf(d, now = Date.now()){
+  if (d.complete) return "complete";
+  if (d.closed) return "closed";
+  if (d.finishing) return wordsOf(d) >= d.finishing.base + 300 ? "finished300" : "finishing";
+  if (now - startOf(d) >= WEEK) return "decide";
+  if (d.arch && !d.arch.met) return "expired";
+  return "active";
+}
+function lockInfo(d, now = Date.now()){
+  const s = stateOf(d, now);
+  if (s === "complete") return { readOnly:true, reason:"This draft is complete and read-only. You can still copy or download it." };
+  if (s === "closed") return { locked:true, reason:"Closed when a newer draft was completed at its one-week mark. Complete, restart or delete it to unlock new prompts." };
+  if (s === "decide") return { locked:true, reason:"A week has passed since this prompt was chosen. Choose complete, restart or delete." };
+  if (s === "finishing") return { reason:`Finishing round: write ${d.finishing.base + 300 - wordsOf(d)} more words, or press Complete draft, to unlock new prompts and older drafts.` };
+  for (const x of allList()){
+    if (x.id === d.id || startOf(d) >= startOf(x)) continue;
+    const sx = stateOf(x, now);
+    if (sx === "expired" || sx === "decide" || sx === "finishing") return { locked:true, gated:true, reason:`Locked while “${titleOf(x)}” ${sx === "expired" ? "is in its archive countdown" : sx === "decide" ? "waits for your decision" : "is in its finishing round"}.` };
+  }
+  return {};
+}
+function promptLock(now = Date.now()){
+  for (const x of allList()){
+    const s = stateOf(x, now);
+    if (s === "expired") return `New prompts are locked: “${titleOf(x)}” hit zero. Write 300 more words in it, or delete it, to unlock.`;
+    if (s === "decide") return `New prompts are locked: “${titleOf(x)}” has run a full week. Complete, restart or delete it.`;
+    if (s === "finishing") return `New prompts are locked: write ${x.finishing.base + 300 - wordsOf(x)} more words in “${titleOf(x)}”, or complete it.`;
+    if (s === "closed") return `New prompts are locked until you complete, restart or delete “${titleOf(x)}”.`;
+  }
+  return "";
+}
+function persist(d){ if (draft && draft.id === d.id) scheduleSave(); else { drafts[d.id] = d; store.put(d).catch(()=>{}); } }
+
+// One-time reset (requested Nov 14): every draft that isn't complete restarts all its clocks from this moment.
+const TIMER_RESET = Date.parse("2026-11-14T22:44:00Z");
+function resetClocks(d){
+  if (d.complete || (d.timerReset || 0) >= TIMER_RESET) return false;
+  Object.assign(d, { startAt:TIMER_RESET, deadline:TIMER_RESET + H72, arch:null, finishing:null, closed:false, earned12:false, used12:false, used36:false, timerReset:TIMER_RESET });
+  return true;
+}
+let rulesBusy = false;
+async function tickRules(){
+  if (rulesBusy) return; rulesBusy = true;
+  const now = Date.now();
+  try{
+    for (const d of allList()){
+      let ch = resetClocks(d);
+      if (d.complete || d.closed || d.finishing){ if (ch) persist(d); continue; } // a finishing round replaces the countdown rules
+      if (!d.deadline){ d.deadline = deadlineOf(d); ch = true; }
+      const w = wordsOf(d), mine = isOpen(d);
+      if (!d.earned12 && !d.used12 && !d.complete && w >= 1500 && d.deadline - now > 10*HR){ d.earned12 = true; ch = true; if (mine) toast("1,500 words: +12 hours available"); }
+      if (d.deadline <= now){
+        if (!d.arch){ const st = Math.max(d.deadline, ARCH_LAUNCH); d.arch = { start:st, end:st + 12*HR, base:w, met:false, steps:0 }; ch = true; }
+        else if (d.arch.met){ const rest = d.arch.left || 0; d.arch = { start:now, end:now + rest, base:w, met:false, steps:0 }; ch = true; }
+      }
+      if (d.arch && !d.arch.met){
+        if (w >= d.arch.base + 300){ d.arch.met = true; d.arch.left = Math.max(0, d.arch.end - now); d.deadline = now + 6*HR; ch = true; if (mine) toast("300 words: +6 hours, archive countdown paused"); }
+        else if (now >= d.arch.end){ await deleteDraft(d, true); continue; }
+      }
+      if (d.arch && d.arch.met){
+        const earned = Math.floor(Math.max(0, w - d.arch.base - 300) / 200);
+        while (d.arch.steps < earned && d.deadline - now < 15*HR){ d.deadline += 3*HR; d.arch.steps++; ch = true; }
+        if (d.deadline - now >= 15*HR){ d.arch = null; ch = true; if (mine) toast("Above 15 hours: archive countdown cleared"); }
+      }
+      if (ch) persist(d);
+    }
+  } finally { rulesBusy = false; }
+  applyLocks();
+}
+
+/* ---------- countdown panel ---------- */
+const ic = (n, cls = "") => `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const pad2 = n => String(n).padStart(2, "0");
+function digits(ms){ const s = Math.floor(Math.abs(ms) / 1000); return `${ms < 0 ? "−" : ""}${pad2(Math.floor(s / 3600))}<small>h</small> ${pad2(Math.floor(s % 3600 / 60))}<small>m</small> ${pad2(s % 60)}<small>s</small>`; }
+const when = t => new Date(t).toLocaleString([], { weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit" });
+let clockOpen = false; try { clockOpen = localStorage.getItem("promptdesk.clockOpen") === "1"; } catch {}
+function toggleClock(){ clockOpen = !clockOpen; try { localStorage.setItem("promptdesk.clockOpen", clockOpen ? "1" : "0"); } catch {} clockKey = ""; renderClock(); }
+const hm = ms => { const m = Math.floor(Math.abs(ms) / 60000); return `${Math.floor(m/60)}h ${pad2(m%60)}m`; };
+let clockKey = "";
+function clockModel(now){
+  const d = draft, dl = deadlineOf(d), left = dl - now, A = d.arch, L = lockInfo(d, now), w = wordCount();
+  const th = (d.used12 ? 6 : 10) * HR, live = left > 0 && !L.locked && !L.readOnly;
+  let mode = "run", label = "Countdown", icon = "hourglass";
+  if (d.complete){ mode = "done"; label = "Complete"; icon = "check"; }
+  else if (d.finishing){ mode = "finish"; label = "Finishing round"; icon = "pen"; }
+  else if (A && !A.met){ mode = "arch"; label = "Countdown ended"; icon = "flag"; }
+  else if (left <= 0){ mode = "over"; label = "Time's up"; icon = "flag"; }
+  else if (left < 6*HR) mode = "hot"; else if (left < 24*HR) mode = "warm";
+  const x12 = d.used12 ? "used" : d.earned12 ? (live ? "ready" : "wait") : (left > 10*HR && !d.complete ? "earn" : "missed");
+  const x36 = d.used36 ? "used" : left <= 0 || d.complete ? "gone" : left < th ? (live ? "ready" : "wait") : "soon";
+  return { d, dl, left, A, w, th, mode, label, icon, x12, x36 };
+}
+function renderClock(){
+  if (!draft || !$("#v-write").classList.contains("on")) return;
+  const now = Date.now(), M = clockModel(now), d = M.d, s0 = startOf(d);
+  const key = [d.id, M.mode, M.x12, M.x36, !!(M.A && M.A.met), clockOpen].join("|");
+  if (key !== clockKey){
+    clockKey = key;
+    const card = (n, icon, title, st) => {
+      const txt = {
+        used:  `${ic("check")} Used`,
+        ready: `<button class="btn small primary" id="add${n}">${ic("plus")} Add ${n} hours</button>`,
+        wait:  `${ic("lock")} Unavailable while locked`,
+        earn:  `<span id="x12txt"></span><span class="mini"><i id="x12bar"></i></span>`,
+        missed:`${ic("lock")} Missed: needed 1,500 words before 10h left`,
+        soon:  `<span id="x36txt"></span>`,
+        gone:  `${ic("lock")} Not available after zero`
+      }[st];
+      return `<div class="xcard ${st}">${ic(icon, "lg")}<div><b>${title}</b> <span class="once">one-time</span><div class="xs">${txt}</div></div></div>`;
+    };
+    const side = M.mode === "arch" ? `<div class="apanel">${ic("archive","lg")}<div><b>Archive countdown</b><div class="adig" id="aDig"></div><div class="xs" id="aTxt"></div><span class="mini red"><i id="aBar"></i></span></div></div>`
+      : M.mode === "finish" ? `<div class="apanel fin">${ic("pen","lg")}<div><b>Finishing round</b><div class="xs" id="aTxt"></div><span class="mini"><i id="aBar"></i></span></div></div>`
+      : (M.A && M.A.met) ? `<div class="apanel paused">${ic("archive","lg")}<div><b>Archive countdown paused</b><div class="xs" id="aTxt"></div><span class="mini"><i id="aBar"></i></span></div></div>` : "";
+    $("#clock").className = "clock m-" + M.mode + (clockOpen ? " open" : "");
+    $("#clock").innerHTML = `
+      <div class="chead" id="cHead" role="button" tabindex="0" aria-expanded="${clockOpen}" aria-controls="cBody" title="${clockOpen ? "Collapse" : "Expand"} countdown details">
+        <span class="cpill">${ic(M.icon)}<span class="lbl">${M.label}</span><b class="hleft" id="hLeft"></b></span>
+        <span class="due" id="hDue"></span>
+        <span class="harch" id="hArch"></span>
+        <span class="xbtns">${!clockOpen && M.x12 === "ready" ? `<button class="xbtn" id="hx12" title="Add 12 hours (one-time)">${ic("bolt")}+12h</button>` : ""}${!clockOpen && M.x36 === "ready" ? `<button class="xbtn" id="hx36" title="Add 36 hours (one-time)">${ic("plusclock")}+36h</button>` : ""}</span>
+        <span class="chint">${clockOpen ? "Less" : "Details"}<svg class="ic chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></span>
+      </div>
+      <div class="tl"><div class="tbar" id="tbar"></div></div>
+      <div class="cbody" id="cBody" ${clockOpen ? "" : "hidden"}>
+        <div class="xrow">${card(12, "bolt", "+12 hours", M.x12)}${card(36, "plusclock", "+36 hours", M.x36)}</div>
+        ${side}
+        <div class="tlegend"><span>${ic("start")} Start</span><span>${ic("plusclock")} +36h unlocks</span><span>${ic("flag")} Zero</span><span>${ic("archive")} Archive deadline</span><span>${ic("calendar")} One week</span><span><i class="sw now"></i> Now</span></div>
+        <div class="xs meta" id="cMeta"></div>
+      </div>`;
+    $("#cHead").onclick = toggleClock;
+    [["#hx12", 12, "used12"], ["#hx36", 36, "used36"]].forEach(([sel, n, flag]) => {
+      const b = $(sel); if (!b) return;
+      b.onclick = e => { e.stopPropagation(); extend(n, flag); };
+      b.onkeydown = e => e.stopPropagation();
+    });
+    $("#cHead").onkeydown = e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); toggleClock(); } };
+    const b12 = $("#add12"), b36 = $("#add36");
+    if (b12) b12.onclick = () => extend(12, "used12");
+    if (b36) b36.onclick = () => extend(36, "used36");
+  }
+  // live numbers
+  $("#hLeft").textContent = M.mode === "done" ? "Finished" : M.mode === "finish" ? "No countdown" : M.left > 0 ? `${hm(M.left)} left` : `${hm(M.left)} over`;
+  $("#hDue").innerHTML = M.mode === "done" ? "Read-only · export it from the footer" : M.mode === "finish" ? "Countdown paused for the finishing round"
+    : `${ic("calendar")} ${M.left > 0 ? "Due" : "Ended"} <b>${when(M.dl)}</b>`;
+  $("#hArch").innerHTML = M.mode === "arch" ? `${ic("archive")} Archive ${hm(M.A.end - now)} · ${Math.max(0, M.A.base + 300 - M.w)} words to go`
+    : M.mode === "finish" ? `${ic("pen")} ${Math.max(0, d.finishing.base + 300 - M.w)} words to unlock` : "";
+  const x12t = clockOpen && $("#x12txt"); if (x12t){ x12t.textContent = `Write 1,500 words before 10h left · ${M.w.toLocaleString()} / 1,500`; $("#x12bar").style.width = Math.min(100, M.w / 15) + "%"; }
+  const x36t = clockOpen && $("#x36txt"); if (x36t) x36t.textContent = `Unlocks in ${Math.max(0, Math.ceil((M.left - M.th) / 60000 / 60))}h at ${d.used12 ? 6 : 10}h left`;
+  if (!clockOpen){} else if (M.mode === "arch"){
+    const got = Math.max(0, M.w - M.A.base);
+    $("#aDig").innerHTML = digits(M.A.end - now);
+    $("#aTxt").textContent = `${got} / 300 words · deleted ${when(M.A.end)} if not met`;
+    $("#aBar").style.width = Math.min(100, got / 3) + "%";
+  } else if (M.mode === "finish"){
+    const got = Math.max(0, M.w - d.finishing.base);
+    $("#aTxt").textContent = got >= 300 ? "Unlocked. Press Complete draft when you're done." : `${got} / 300 words to unlock prompts and older drafts`;
+    $("#aBar").style.width = Math.min(100, got / 3) + "%";
+  } else if (M.A && M.A.met){
+    const over = Math.max(0, M.w - M.A.base - 300), into = over % 200;
+    $("#aTxt").textContent = `${fmtLeft(M.A.left || 0).replace(" left", "")} saved · +3h per 200 words until 15h left · ${into} / 200 to the next 3h`;
+    $("#aBar").style.width = (into / 2) + "%";
+  }
+  // timeline
+  const A = M.A, dl = M.dl;
+  const span = Math.max(WEEK, (A && !A.met ? A.end : dl) - s0) * 1.03;
+  const pc = t => Math.max(0, Math.min(100, (t - s0) / span * 100));
+  const base72 = s0 + 72*HR;
+  let bar = `<span class="seg win" style="width:${pc(Math.min(dl, base72))}%"></span>`;
+  if (dl > base72) bar += `<span class="seg ext" style="left:${pc(base72)}%;width:${pc(dl) - pc(base72)}%"></span>`;
+  if (A && !A.met) bar += `<span class="seg arc" style="left:${pc(A.start)}%;width:${pc(A.end) - pc(A.start)}%"></span>`;
+  bar += `<span class="seg el" style="width:${pc(now)}%"></span>`;
+  for (let i = 1; i <= 7; i++) bar += `<span class="dtick" style="left:${pc(s0 + i*24*HR)}%"></span><span class="day" style="left:${pc(s0 + (i - .5)*24*HR)}%">Day ${i}</span>`;
+  const pin = (t, icon, cls, title) => `<span class="pin ${cls}" style="left:${pc(t)}%" title="${title}">${ic(icon)}</span>`;
+  bar += pin(s0, "start", "", "Start · " + when(s0));
+  if (!d.used36 && !d.complete && M.left > 0) bar += pin(dl - M.th, "plusclock", "amber", `+36h unlocks · ${when(dl - M.th)}`);
+  bar += pin(dl, "flag", "red", "Zero · " + when(dl));
+  if (A && !A.met) bar += pin(A.end, "archive", "red", "Archive deadline · " + when(A.end));
+  bar += pin(s0 + WEEK, "calendar", "", "One week · " + when(s0 + WEEK));
+  bar += `<span class="nowmk" style="left:${pc(now)}%" title="Now"></span>`;
+  $("#tbar").innerHTML = bar;
+  const tot = now - s0;
+  if (clockOpen) $("#cMeta").innerHTML = `${ic("clock")} Day ${Math.floor(tot / 86400e3) + 1} of 7 · ${Math.floor(tot / HR)}h ${pad2(Math.floor(tot % HR / 60000))}m since start · ${ic("calendar")} week mark ${when(s0 + WEEK)} (${Math.max(0, Math.ceil((WEEK - tot) / HR))}h)`;
+}
+
+/* ---------- locks ---------- */
+let lastLockKey = "";
+function applyLocks(){
+  const now = Date.now(), pl = promptLock(now);
+  $("#lockBanner").hidden = !pl; $("#lockBanner").textContent = pl;
+  $("#genBtn").disabled = !sampleFn || !!pl || ui.generating;
+  $$("#optBox .go, [data-reopen]").forEach(b => b.disabled = !!pl);
+  if (draft){
+    const L = lockInfo(draft, now), ro = !!(L.locked || L.readOnly);
+    if ($("#editor").isContentEditable === ro) $("#editor").contentEditable = ro ? "false" : "true";
+    $(".left").classList.toggle("locked", ro);
+    $("#draftBanner").hidden = !L.reason; $("#draftBanner").textContent = L.reason || "";
+    const done = stateOf(draft, now) === "complete";
+    $("#completeBtn").hidden = done || !!L.gated; $("#restartBtn").hidden = done || !!L.gated; $("#deleteBtn").hidden = !!L.gated;
+  }
+  const dec = allList().find(d => stateOf(d, now) === "decide");
+  const key = dec ? dec.id : "";
+  if (key !== lastLockKey){ lastLockKey = key; if (dec) showDecision(dec); else $("#modal").hidden = true; }
+  renderClock();
+}
+setInterval(() => { tickTimers(); applyLocks(); }, 1000);
+setInterval(tickRules, 5000);
+
+function showDecision(d){
+  const hrs = Math.floor((Date.now() - startOf(d)) / HR);
+  $("#mbox").innerHTML = `<h2 id="modalTitle">A week on “${esc(titleOf(d))}”</h2>
+  <p>${hrs} hours have passed since you chose this prompt. Until you decide, new prompts and writing in this and older drafts are locked.</p>
+  <p class="hint"><b>Complete</b> keeps it open and editable for a finishing round; older drafts and new prompts stay locked until you write 300 more words in it or press Complete draft. <b>Restart</b> clears the text and analysis, keeps a four-sentence summary and outline, and resets every countdown (+12h and +36h stay used). <b>Delete</b> erases it; a draft over 300 words leaves its prompt and summary in the archive.</p>
+  <div class="actions"><button class="btn ghost danger" id="mDel">Delete</button><button class="btn" id="mRe">Restart</button><button class="btn primary" id="mDone">Complete</button></div>`;
+  $("#modal").hidden = false;
+  $("#mDone").onclick = e => armed(e.currentTarget, () => act("complete-week", d));
+  $("#mRe").onclick = e => armed(e.currentTarget, () => act("restart", d));
+  $("#mDel").onclick = e => armed(e.currentTarget, () => act("delete", d));
+}
+
+/* ---------- complete / restart / delete ---------- */
+function htmlText(html){ const el = document.createElement("div"); el.innerHTML = html || ""; el.querySelectorAll("h1,h2,h3,p,li,blockquote").forEach(n => n.append("\n")); return el.textContent.replace(/\n{2,}/g, "\n").trim(); }
+function outlineOf(html){ const el = document.createElement("div"); el.innerHTML = html || ""; return [...el.querySelectorAll("h1,h2,h3")].map(n => n.tagName + " " + n.textContent.trim()); }
+async function summarize(d){
+  if (!sampleFn) return "";
+  try { const r = await sampleFn(`Summarize this draft in exactly four plain sentences. No quotations.\n"""\n${htmlText(d.html).slice(0, 12000)}\n"""`, { modelTier:"quick" }); return (r.text || "").trim(); }
+  catch { return ""; }
+}
+async function act(kind, d){
+  if (!d) return;
+  if (draft && draft.id === d.id){ draft.html = $("#editor").innerHTML; draft.words = wordCount(); }
+  if (kind === "complete" || kind === "complete-week"){
+    if (kind === "complete-week"){
+      // One-week box → Complete: the draft stays open for a finishing round; older drafts and new prompts
+      // stay locked until 300 more words are written here or the draft is completed.
+      d.finishing = { base: wordsOf(d), at: Date.now() }; d.arch = null; persist(d);
+      toast("Finishing round: 300 more words or Complete draft unlocks everything");
+    } else { d.complete = true; d.completedAt = Date.now(); d.arch = null; persist(d); toast("Draft completed"); }
+  } else if (kind === "restart"){
+    toast("Summarising before restart…");
+    const summary = await summarize(d);
+    d.history = (d.history || []).concat([{ at:Date.now(), words:d.words || 0, summary, outline:outlineOf(d.html) }]);
+    const head = d.prompt?.workingHeadline || d.prompt?.title || "Untitled";
+    Object.assign(d, { html:`<h1>${esc(head)}</h1><p><br></p>`, words:0, research:null, notes:null, notesAt:null, notesHash:null,
+      startAt:Date.now(), deadline:Date.now() + H72, arch:null, finishing:null, earned12:false, used12:false, used36:false, closed:false }); // +12h and +36h: once each, renewed by a restart
+    persist(d);
+    if (draft && draft.id === d.id) loadWorkspace();
+    toast("Draft restarted: every countdown reset");
+  } else if (kind === "delete"){ await deleteDraft(d, false); return; }
+  $("#modal").hidden = true; lastLockKey = "";
+  renderDrafts();
+}
+async function deleteDraft(d, auto){
+  const words = isOpen(d) ? wordCount() : (d.words || 0);
+  if (words > 300){
+    const summary = await summarize(d);
+    try { await store.archPut({ id:"a" + d.id, prompt:d.prompt, category:d.category, summary, words, archivedAt:Date.now() }); } catch {}
+  }
+  try { await store.del(d.id); } catch {}
+  try { await localStore.del(d.id); } catch {}
+  delete drafts[d.id];
+  if (draft && draft.id === d.id){ clearTimeout(saveTimer); draft = null; $("#nav-write").disabled = true; showView("prompts"); }
+  $("#modal").hidden = true; lastLockKey = "";
+  toast(auto ? `“${titleOf(d)}” was deleted: its archive countdown ran out` : "Draft deleted");
+  renderDrafts();
+}
+function extend(hours, flag){ if (!draft || draft[flag]) return; clockKey = ""; draft[flag] = true; draft.deadline = deadlineOf(draft) + hours*HR; scheduleSave(); toast(`+${hours} hours added`); applyLocks(); }
+
+function startDraft(p){
+  const pl = promptLock(); if (pl){ toast(pl); return; }
+  const c = CATS[p.category];
+  const head = p.workingHeadline || p.title || "Untitled";
+  draft = { id:uid(), category:p.category, prompt:p, inputs:p.inputs, citeStyle:c.cite, citations:[],
+    html:`<h1>${esc(head)}</h1><p><br></p>`, research:null, notes:null, notesAt:null, createdAt:Date.now(), startAt:Date.now(), updatedAt:Date.now(), deadline:Date.now()+H72, words:0 };
+  loadWorkspace();
+  saveNow();
+  runArt();
+  runResearch();
+}
+async function openDraft(id){
+  let d = null;
+  try { d = await store.get(id); } catch {}
+  if (!d && store !== localStore) d = await localStore.get(id);
+  if (!d){ toast("That draft couldn't be found"); showView("prompts"); return; }
+  const L = lockInfo(d); if (L.gated){ toast(L.reason); return; }
+  if (draft && draft.id !== d.id) await saveNow();
+  draft = d; draft.citations = draft.citations || [];
+  if (resetClocks(draft)) scheduleSave();
+  loadWorkspace();
+  // New drafts, and drafts still holding pre-ink colour art, get ink drawings.
+  const A = draft.art || {};
+  if (!((A.still && A.still.inner !== undefined) || (A.loop && A.loop.inner !== undefined))) runArt();
+  if (!draft.research && !(draft.history && draft.history.length) && !draft.complete) runResearch();
+}
+function loadWorkspace(){
+  $("#nav-write").disabled = false;
+  if (!draft.deadline){ draft.deadline = deadlineOf(draft); scheduleSave(); }
+  clockKey = "";
+  const p = draft.prompt, c = CATS[draft.category];
+  $("#briefMeta").innerHTML = `<span class="chip">${esc(c.name)}</span><span class="chip alt">${p.kind==="question"?"Question":"Brief"}</span>${[draft.inputs?.situation,draft.inputs?.location,draft.inputs?.emotion].filter(Boolean).map(x=>`<span class="chip alt">${esc(x)}</span>`).join("")}`;
+  $("#briefText").textContent = p.prompt;
+  $("#editor").innerHTML = draft.html || "<p><br></p>";
+  $("#breakBtn").style.display = (draft.category==="cnf"||draft.category==="fic") ? "" : "none";
+  renderSpec($("#p-format"), draft.category);
+  $("#p-format").insertAdjacentHTML("beforeend", `<div class="actions" style="margin-top:14px"><button class="btn small" id="skelBtn">Insert this structure at the end of the draft</button></div>`);
+  $("#skelBtn").onclick = () => { $("#editor").insertAdjacentHTML("beforeend", c.skeleton.join("")); onEdit(); toast("Structure added"); };
+  if ((draft.history||[]).length) $("#p-format").insertAdjacentHTML("beforeend", `<div class="h4" style="margin-top:20px">Earlier attempts (before restart)</div>` + draft.history.map((x,i) => `<div class="hist"><b>Attempt ${i+1}</b> · ${x.words} words · ${new Date(x.at).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}<p style="margin:6px 0">${esc(x.summary || "Summary unavailable.")}</p>${x.outline && x.outline.length ? `<div class="src">Structure: ${x.outline.map(esc).join(" › ")}</div>` : ""}</div>`).join(""));
+  autoNotesDone = false;
+  prevWords = wordCount();
+  renderArt(); renderResearch(); renderNotes(); renderCites(); refreshCites(); updateCount();
+  showView("write");
+  lastLockKey = "x"; applyLocks();
+  $("#saveStatus").textContent = storeKind==="account" ? "Saved to your account" : "Saved in this browser";
+  // "On every refresh": opening a draft that already has 1,000+ words runs the editor's notes.
+  // Skipped when the text is unchanged since the last review, to save tokens.
+  if (wordCount() >= 1000 && draft.notesHash !== hashText(docToText())){ autoNotesDone = true; runNotes(true); }
+}
+
+/* ---------- editor ---------- */
+const editor = () => $("#editor");
+function wordCount(){
+  const ed = editor(); if (!ed) return 0;
+  let n = (ed.innerText.match(/[A-Za-z0-9À-ɏ'’-]+/g) || []).length;
+  ed.querySelectorAll(".cite").forEach(c => n -= (c.textContent.match(/[A-Za-z0-9À-ɏ'’-]+/g) || []).length);
+  return Math.max(0, n);
+}
+function titleFromDoc(){ const h = editor().querySelector("h1"); return (h && h.textContent.trim()) || draft?.prompt?.title || "Untitled"; }
+let prevWords = 0;
+function updateCount(){
+  const n = wordCount(), c = CATS[draft.category];
+  $("#wc").textContent = n.toLocaleString() + " words";
+  const max = Math.max(c.range[1], 1200);
+  $("#meterFill").style.width = Math.min(100, n/max*100) + "%";
+  $("#meterTick").style.left = Math.min(100, 1000/max*100) + "%";
+  $("#target").textContent = `Target ${c.range[0].toLocaleString()}–${c.range[1].toLocaleString()}`;
+  if (!autoNotesDone && prevWords < 1000 && n >= 1000){ autoNotesDone = true; runNotes(true); }
+  prevWords = n;
+  return n;
+}
+function onEdit(){ updateCount(); refreshCites(); scheduleSave(); }
+
+function saveSelection(){
+  const s = window.getSelection();
+  if (s.rangeCount && editor().contains(s.anchorNode)) lastRange = s.getRangeAt(0).cloneRange();
+}
+document.addEventListener("selectionchange", () => { if (draft) saveSelection(); });
+function restoreSelection(){
+  const ed = editor(); ed.focus();
+  const s = window.getSelection();
+  if (lastRange && ed.contains(lastRange.startContainer)){ s.removeAllRanges(); s.addRange(lastRange); }
+  else { const r = document.createRange(); r.selectNodeContents(ed); r.collapse(false); s.removeAllRanges(); s.addRange(r); }
+}
+
+function wireToolbar(){
+  $$(".toolbar .tb").forEach(b => b.addEventListener("mousedown", e => e.preventDefault()));
+  $$(".toolbar [data-block]").forEach(b => b.onclick = () => { restoreSelection(); document.execCommand("formatBlock", false, "<" + b.dataset.block + ">"); onEdit(); });
+  $$(".toolbar [data-cmd]").forEach(b => b.onclick = () => { restoreSelection(); document.execCommand(b.dataset.cmd, false, null); onEdit(); });
+  $("#breakBtn").onclick = () => { restoreSelection(); document.execCommand("insertHTML", false, '<p class="break">* * *</p><p><br></p>'); onEdit(); };
+  $("#citeQuick").onclick = () => { saveSelection(); switchPane("cites"); toast("Pick a source and press Cite"); };
+  const ed = editor();
+  ed.addEventListener("input", onEdit);
+  ed.addEventListener("paste", e => {
+    e.preventDefault();
+    const t = (e.clipboardData || window.clipboardData).getData("text/plain");
+    const paras = t.replace(/\r/g,"").split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+    if (paras.length > 1) document.execCommand("insertHTML", false, paras.map(p => `<p>${esc(p).replace(/\n/g,"<br>")}</p>`).join(""));
+    else document.execCommand("insertText", false, t);
+  });
+  ed.addEventListener("keydown", e => {
+    if (e.key === "Backspace" || e.key === "Delete"){ setTimeout(onEdit, 0); }
+  });
+}
+
+function docToText(){
+  const out = [];
+  editor().childNodes.forEach(n => {
+    if (n.nodeType === 3){ if (n.textContent.trim()) out.push(n.textContent.trim()); return; }
+    if (n.nodeType !== 1) return;
+    const t = n.innerText.trim(); if (!t) return;
+    const tag = n.tagName;
+    if (tag==="H1") out.push("# " + t);
+    else if (tag==="H2") out.push("## " + t);
+    else if (tag==="H3") out.push("### " + t);
+    else if (tag==="BLOCKQUOTE") out.push("> " + t.replace(/\n/g,"\n> "));
+    else if (tag==="UL") out.push([...n.querySelectorAll("li")].map(li=>"- "+li.innerText.trim()).join("\n"));
+    else if (tag==="OL") out.push([...n.querySelectorAll("li")].map((li,i)=>(i+1)+". "+li.innerText.trim()).join("\n"));
+    else out.push(t);
+  });
+  return out.join("\n\n");
+}
+
+/* =====================================================================
+   Citations
+   ===================================================================== */
+function splitAuthors(a){ return String(a||"").split(";").map(s=>s.trim()).filter(Boolean); }
+// People are entered "Last, First"; anything without a comma is treated as an organization.
+function isOrg(a){ return !a.includes(","); }
+function lastOf(a){ return isOrg(a) ? a.trim() : a.split(",")[0].trim(); }
+function firstOf(a){ return isOrg(a) ? "" : a.split(",").slice(1).join(",").trim(); }
+function natural(a){ const f = firstOf(a); return f ? f + " " + lastOf(a) : lastOf(a); }
+function initials(f){ return f.split(/[\s-]+/).filter(Boolean).map(x=>x[0].toUpperCase()+".").join(" "); }
+function shortTitle(t){ return String(t||"").split(/[:.?]/)[0].split(/\s+/).slice(0,4).join(" "); }
+const it = s => s ? `<i>${esc(s)}</i>` : "";
+const urlPart = s => s.url ? ` <a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.url)}</a>` : "";
+const isWork = s => ["book","report"].includes(s.type);
+
+function refEntry(s, style){
+  const A = splitAuthors(s.authors), y = s.year || "n.d.";
+  const title = isWork(s) ? it(s.title) : esc(s.title);
+  if (style==="apa"){
+    let au = A.map(a => isOrg(a) ? esc(a) + "." :esc(lastOf(a)) + ", " + esc(initials(firstOf(a))));
+    au = au.length > 1 ? au.slice(0,-1).join(", ") + ", &amp; " + au.slice(-1) : (au[0] || "");
+    return `${au ? au + " " : ""}(${esc(y)}). ${title}. ${s.container && !isWork(s) ? it(s.container) + ". " : (s.container ? esc(s.container)+". " : "")}${urlPart(s)}`;
+  }
+  if (style==="mla"){
+    let au = "";
+    if (A.length===1) au = isOrg(A[0]) ? A[0] : `${lastOf(A[0])}, ${firstOf(A[0])}`;
+    else if (A.length===2) au = `${lastOf(A[0])}, ${firstOf(A[0])}, and ${natural(A[1])}`;
+    else if (A.length>2) au = `${lastOf(A[0])}, ${firstOf(A[0])}, et al`;
+    const t = isWork(s) ? it(s.title) + "." : "“" + esc(s.title) + ".”";
+    const cont = s.container ? (isWork(s) ? esc(s.container) : it(s.container)) + ", " : "";
+    return `${au ? esc(au.replace(/\.$/,"")) + ". " : ""}${t} ${cont}${esc(y)}${s.url ? ", " + esc(s.url.replace(/^https?:\/\//,"")) : ""}.${s.accessed ? " Accessed " + esc(s.accessed) + "." : ""}`;
+  }
+  if (style==="chicago"){
+    let au = "";
+    if (A.length===1) au = isOrg(A[0]) ? A[0] : `${lastOf(A[0])}, ${firstOf(A[0])}`;
+    else if (A.length>1) au = `${lastOf(A[0])}, ${firstOf(A[0])}, ` + A.slice(1,-1).map(natural).join(", ") + (A.length>2?", ":"") + "and " + natural(A[A.length-1]);
+    const t = isWork(s) ? it(s.title) + "." : "“" + esc(s.title) + ".”";
+    const cont = s.container ? (isWork(s) ? esc(s.container) : it(s.container)) + ", " : "";
+    return `${au ? esc(au.replace(/\.$/,"")) + ". " : ""}${t} ${cont}${esc(y)}.${urlPart(s)}`;
+  }
+  // AP / none: plain source line
+  return `${esc(s.container || A.map(natural).join(", "))}: “${esc(s.title)}” (${esc(y)}).${urlPart(s)}`;
+}
+function inText(s, loc, style){
+  const A = splitAuthors(s.authors), y = s.year || "n.d.";
+  const name = A.length===0 ? `“${shortTitle(s.title)}”` : A.length===1 ? lastOf(A[0]) : A.length===2 ? (style==="apa" ? `${lastOf(A[0])} & ${lastOf(A[1])}` : `${lastOf(A[0])} and ${lastOf(A[1])}`) : `${lastOf(A[0])} et al.`;
+  if (style==="apa") return `(${name}, ${y}${loc ? ", " + (/^\d/.test(loc) ? "p. " + loc : loc) : ""})`;
+  if (style==="mla") return `(${name}${loc ? " " + loc : ""})`;
+  if (style==="ap" || style==="none") return `(${s.container || name}${s.year ? ", " + s.year : ""})`;
+  return "";
+}
+function chicagoNote(s, loc, first){
+  const A = splitAuthors(s.authors);
+  const loctxt = loc ? ", " + loc : "";
+  if (!first) return `${esc(A.length ? A.map(lastOf).join(" and ") + ", " : "")}${isWork(s) ? it(shortTitle(s.title)) : "“" + esc(shortTitle(s.title)) + "”"}${esc(loctxt)}.`;
+  const au = A.map(natural).join(A.length>2 ? ", " : " and ");
+  if (isWork(s)) return `${au ? esc(au) + ", " : ""}${it(s.title)} (${s.container ? esc(s.container) + ", " : ""}${esc(s.year||"n.d.")})${esc(loctxt)}.${urlPart(s)}`;
+  return `${au ? esc(au) + ", " : ""}“${esc(s.title)},” ${s.container ? it(s.container) + ", " : ""}${esc(s.year||"n.d.")}${esc(loctxt)}.${urlPart(s)}`;
+}
+function srcById(id){ return (draft?.citations || []).find(s => s.id === id); }
+
+function refreshCites(){
+  if (!draft) return;
+  const style = draft.citeStyle, spans = [...editor().querySelectorAll(".cite")];
+  const notes = [], seen = new Set(), used = [];
+  spans.forEach(sp => {
+    const s = srcById(sp.dataset.src);
+    if (!s){ sp.remove(); return; }
+    if (!used.includes(s)) used.push(s);
+    if (style==="chicago"){
+      const n = notes.length + 1;
+      notes.push(chicagoNote(s, sp.dataset.loc, !seen.has(s.id))); seen.add(s.id);
+      if (sp.tagName !== "SUP"){ const sup = document.createElement("sup"); sup.className="cite"; sup.contentEditable="false"; sup.dataset.src=sp.dataset.src; if(sp.dataset.loc) sup.dataset.loc=sp.dataset.loc; sp.replaceWith(sup); sup.textContent = n; }
+      else sp.textContent = n;
+    } else {
+      if (sp.tagName === "SUP"){ const sn = document.createElement("span"); sn.className="cite"; sn.contentEditable="false"; sn.dataset.src=sp.dataset.src; if(sp.dataset.loc) sn.dataset.loc=sp.dataset.loc; sp.replaceWith(sn); sn.textContent = inText(s, sn.dataset.loc, style); }
+      else sp.textContent = inText(s, sp.dataset.loc, style);
+    }
+  });
+  const box = $("#refs");
+  if (!used.length || style==="none"){ box.innerHTML = ""; return; }
+  const sorted = [...used].sort((a,b) => (lastOf(splitAuthors(a.authors)[0]||a.title)).localeCompare(lastOf(splitAuthors(b.authors)[0]||b.title)));
+  if (style==="chicago") box.innerHTML = `<h2>Notes</h2><ol>${notes.map(n=>`<li>${n}</li>`).join("")}</ol><h2>Bibliography</h2><ul class="hang">${sorted.map(s=>`<li>${refEntry(s,"chicago")}</li>`).join("")}</ul>`;
+  else if (style==="apa") box.innerHTML = `<h2>References</h2><ul class="hang">${sorted.map(s=>`<li>${refEntry(s,"apa")}</li>`).join("")}</ul>`;
+  else if (style==="mla") box.innerHTML = `<h2>Works Cited</h2><ul class="hang">${sorted.map(s=>`<li>${refEntry(s,"mla")}</li>`).join("")}</ul>`;
+  else box.innerHTML = `<h2>Sources</h2><ul>${used.map(s=>`<li>${refEntry(s,"ap")}</li>`).join("")}</ul>`;
+}
+function insertCite(id, loc){
+  const s = srcById(id); if (!s) return;
+  if (draft.citeStyle === "none"){ toast("Choose a citation style first"); return; }
+  restoreSelection();
+  const tag = draft.citeStyle==="chicago" ? "sup" : "span";
+  document.execCommand("insertHTML", false, `&nbsp;<${tag} class="cite" contenteditable="false" data-src="${esc(id)}"${loc?` data-loc="${esc(loc)}"`:""}>…</${tag}>&nbsp;`);
+  onEdit(); toast("Citation inserted");
+}
+function addSource(s){
+  draft.citations.push({ id:"s"+Math.random().toString(36).slice(2,8), type:"web", authors:"", title:"", container:"", year:"", url:"", accessed:"", ...s });
+  renderCites(); scheduleSave();
+}
+function renderCites(){
+  const el = $("#p-cites"); if (!draft) return;
+  const st = draft.citeStyle;
+  el.innerHTML = `
+  <div class="rhead"><div class="field grow" style="margin:0"><label for="citeStyle">Citation style <em>(default for ${esc(CATS[draft.category].name)}: ${esc(CITE_STYLES[CATS[draft.category].cite])})</em></label>
+    <select id="citeStyle">${Object.entries(CITE_STYLES).map(([k,v])=>`<option value="${k}" ${k===st?"selected":""}>${v}</option>`).join("")}</select></div></div>
+  ${st==="ap" ? `<p class="note">AP style puts attribution in the sentence (“according to…”). The marker inserted here is a reminder to name the source in the prose; remove it before you file.</p>` : ""}
+  <details class="add"><summary>Add a source</summary>
+    <div class="form2" style="margin-top:10px">
+      <div class="field"><label for="sf-type">Type</label><select id="sf-type"><option value="web">Web page</option><option value="article">Article</option><option value="journal">Journal article</option><option value="book">Book</option><option value="report">Report</option></select></div>
+      <div class="field"><label for="sf-year">Year</label><input id="sf-year" type="text" placeholder="2025"></div>
+      <div class="field wide"><label for="sf-auth">Authors <em>(Last, First; Last, First — or an organization)</em></label><input id="sf-auth" type="text" placeholder="Baldwin, James"></div>
+      <div class="field wide"><label for="sf-title">Title</label><input id="sf-title" type="text"></div>
+      <div class="field wide"><label for="sf-cont">Publication, site or publisher</label><input id="sf-cont" type="text"></div>
+      <div class="field"><label for="sf-url">URL or DOI</label><input id="sf-url" type="text"></div>
+      <div class="field"><label for="sf-acc">Accessed</label><input id="sf-acc" type="text" placeholder="${esc(today())}"></div>
+    </div>
+    <button class="btn small primary" id="sf-add" style="margin-top:10px">Add source</button>
+  </details>
+  ${draft.citations.length ? draft.citations.map(s => `
+    <div class="srcrow">
+      ${s.suggested && !s.checked ? `<div style="margin-bottom:6px"><span class="chip warn">Suggested by Claude · verify before citing</span></div>` : ""}
+      <p class="ref">${refEntry(s, st==="none"?"apa":st)}</p>
+      <div class="ctl">
+        <input type="text" id="loc-${s.id}" placeholder="${st==="mla"||st==="apa"?"page":"page / para"}" aria-label="Page or location">
+        <button class="btn small primary" data-cite="${s.id}">Cite at cursor</button>
+        ${s.suggested && !s.checked ? `<button class="btn small" data-check="${s.id}">I've checked it</button>` : ""}
+        <button class="btn small ghost danger" data-rm="${s.id}">Remove</button>
+      </div>
+    </div>`).join("") : `<div class="empty">No sources yet. Add one above, or add Claude's suggestions from the Research tab.</div>`}`;
+  $("#citeStyle").onchange = e => { draft.citeStyle = e.target.value; refreshCites(); renderCites(); scheduleSave(); };
+  $("#sf-add").onclick = () => {
+    const s = { type:$("#sf-type").value, authors:$("#sf-auth").value.trim(), title:$("#sf-title").value.trim(), container:$("#sf-cont").value.trim(), year:$("#sf-year").value.trim(), url:$("#sf-url").value.trim(), accessed:$("#sf-acc").value.trim() };
+    if (!s.title){ toast("A source needs at least a title"); return; }
+    addSource(s); toast("Source added");
+  };
+  $$("[data-cite]").forEach(b => b.onclick = () => insertCite(b.dataset.cite, ($("#loc-"+b.dataset.cite)?.value||"").trim()));
+  $$("[data-check]").forEach(b => b.onclick = () => { const s=srcById(b.dataset.check); s.checked=true; renderCites(); scheduleSave(); });
+  $$("[data-rm]").forEach(b => b.onclick = () => { draft.citations = draft.citations.filter(s=>s.id!==b.dataset.rm); refreshCites(); renderCites(); scheduleSave(); });
+}
+
+/* =====================================================================
+   Research (40% rail)
+   ===================================================================== */
+let researchBusy = false;
+async function runResearch(){
+  if (!draft || researchBusy) return;
+  const el = $("#resBox");
+  if (!sampleFn){ el.innerHTML = `<div class="note">Claude isn't connected in this view, so research can't run. Your writing and citations still work.</div>`; return; }
+  researchBusy = true;
+  el.innerHTML = loadingHTML("Claude is researching the topic…");
+  const p = draft.prompt, i = draft.inputs || {};
+  const ask = `Research brief for a ${CATS[draft.category].name} piece. Date ${today()}.
+Prompt: ${p.prompt}
+Topic: ${p.topic||"-"}; location: ${i.location||"-"}; situation: ${i.situation||"-"}.
+Rules: only facts you're highly confident in (omit, don't guess); no invented quotes/stats/anecdotes; name a specific source+year for each; url only if certain (homepage ok) else "". asOf = month/year your knowledge reflects; changes = what to recheck. 3-4 items per list, terse.
+JSON only: {"asOf":"","snapshot":{"summary":"","points":[],"openQuestions":[]},"changes":[],"fundamentals":[{"term":"","explanation":""}],"location":{"summary":"","facts":[{"fact":"","source":""}]},"anecdotes":[{"story":"","source":""}],"data":[{"label":"","value":"","year":"","source":""}],"obscure":[{"fact":"","source":"","confidence":"high|medium"}],"tidbits":[{"text":"","source":""}],"sources":[{"type":"web|article|journal|book|report","authors":"Last, First; or org","year":"","title":"","container":"","url":""}]}`;
+  try{
+    draft.research = await askJSON(ask, "default");
+    draft.researchAt = Date.now();
+    scheduleSave();
+  }catch(e){
+    el.innerHTML = `<div class="err">${esc(aiError(e))}</div><div class="actions"><button class="btn small" id="rRetry">Try again</button></div>`;
+    $("#rRetry").onclick = runResearch; researchBusy = false; return;
+  }
+  researchBusy = false;
+  renderResearch();
+}
+function renderResearch(){
+  const el = $("#resBox"), r = draft?.research;
+  if (!r){ if (!researchBusy) el.innerHTML = `<div class="empty">No research yet.</div><div class="actions" style="margin-top:10px"><button class="btn small primary" id="rGo">Research this prompt</button></div>`; const g=$("#rGo"); if(g) g.onclick=runResearch; return; }
+  const src = s => s ? `<div class="src">Source: ${esc(s)}</div>` : "";
+  const list = (a, f) => (a||[]).length ? a.map(f).join("") : `<p class="src">Nothing Claude could state confidently.</p>`;
+  el.innerHTML = `
+  <div class="rhead"><span class="chip warn">From Claude's knowledge${r.asOf?" · as of "+esc(r.asOf):""}</span><span class="grow"></span><button class="btn small" id="rRefresh">Refresh research</button></div>
+  <p class="note" style="margin-bottom:16px">Not a live web search. Every fact names its source so you can confirm it before it goes into the piece.</p>
+  <div class="sec"><h3>State of the topic</h3><p>${esc(r.snapshot?.summary)}</p><ul>${(r.snapshot?.points||[]).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>
+    ${(r.snapshot?.openQuestions||[]).length?`<p style="margin-top:8px"><b>Open questions</b></p><ul>${r.snapshot.openQuestions.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}</div>
+  ${(r.changes||[]).length?`<div class="sec"><h3>Check before publishing</h3><ul>${r.changes.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></div>`:""}
+  <div class="sec"><h3>Data</h3><div class="stats">${list(r.data, d=>`<div class="stat"><div class="v">${esc(d.value)}</div><div class="l">${esc(d.label)}${d.year?` (${esc(d.year)})`:""}</div>${src(d.source)}</div>`)}</div></div>
+  <div class="sec"><h3>Fundamentals</h3><div class="facts">${list(r.fundamentals, f=>`<div class="fact"><b>${esc(f.term)}.</b> ${esc(f.explanation)}</div>`)}</div></div>
+  <div class="sec"><h3>The place${draft.inputs?.location?": "+esc(draft.inputs.location):""}</h3><p>${esc(r.location?.summary)}</p><div class="facts">${list(r.location?.facts, f=>`<div class="fact">${esc(f.fact)}${src(f.source)}</div>`)}</div></div>
+  <div class="sec"><h3>Anecdotes</h3><div class="facts">${list(r.anecdotes, a=>`<div class="fact">${esc(a.story)}${src(a.source)}</div>`)}</div></div>
+  <div class="sec"><h3>Obscure facts</h3><div class="facts">${list(r.obscure, o=>`<div class="fact">${esc(o.fact)} <span class="chip ${o.confidence==="high"?"keep":"warn"}">${esc(o.confidence||"medium")} confidence</span>${src(o.source)}</div>`)}</div></div>
+  <div class="sec"><h3>Tidbits</h3><ul>${(r.tidbits||[]).map(t=>`<li>${esc(typeof t==="string"?t:t.text)}${t.source?` <span class="src">(${esc(t.source)})</span>`:""}</li>`).join("")}</ul></div>
+  <div class="sec"><h3>Sources to consult</h3>${(r.sources||[]).map((s,ix)=>`<div class="srcrow"><p class="ref">${refEntry({...s}, "apa")}</p><div class="ctl"><button class="btn small" data-addsrc="${ix}">Add to citations</button></div></div>`).join("") || `<p class="src">None suggested.</p>`}</div>`;
+  $("#rRefresh").onclick = runResearch;
+  $$("[data-addsrc]").forEach(b => b.onclick = () => { addSource({...r.sources[+b.dataset.addsrc], suggested:true}); b.disabled = true; b.textContent = "Added"; });
+}
+
+/* =====================================================================
+   Illustrations — drawn by Claude as SVG (the page cannot load web images)
+   ===================================================================== */
+let artBusy = false;
+const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
+function cleanSVG(src){
+  try{
+    const doc = new DOMParser().parseFromString(String(src||"").trim(), "image/svg+xml");
+    const svg = doc.documentElement;
+    if (!svg || svg.nodeName.toLowerCase() !== "svg" || doc.querySelector("parsererror")) return null;
+    svg.querySelectorAll("script,foreignObject,iframe,image,a,audio,video,embed,object").forEach(n => n.remove());
+    const all = [svg, ...svg.querySelectorAll("*")];
+    all.forEach(el => [...el.attributes].forEach(at => {
+      const n = at.name.toLowerCase(), v = at.value.trim().toLowerCase();
+      if (n.startsWith("on")) el.removeAttribute(at.name);
+      else if ((n === "href" || n === "xlink:href") && !v.startsWith("#")) el.removeAttribute(at.name);
+      else if (/url\(\s*['"]?(?!#)/.test(v)) el.removeAttribute(at.name);
+    }));
+    svg.querySelectorAll("style").forEach(s => { s.textContent = s.textContent.replace(/@import[^;]*;?/gi, "").replace(/url\(\s*['"]?(?!#)[^)]*\)/gi, "none"); });
+    if (!svg.getAttribute("viewBox")) svg.setAttribute("viewBox", "0 0 800 500");
+    svg.removeAttribute("width"); svg.removeAttribute("height");
+    svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
+    svg.setAttribute("role", "img");
+    return new XMLSerializer().serializeToString(svg);
+  }catch{ return null; }
+}
+// Give each inline SVG its own id namespace so gradients and filters don't collide.
+function scopeIds(svg, pfx){
+  const ids = [...svg.matchAll(/\sid="([^"]+)"/g)].map(m => m[1]);
+  ids.forEach(id => {
+    const e = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    svg = svg.replace(new RegExp(`(\\sid=")${e}(")`, "g"), `$1${pfx}-${id}$2`)
+             .replace(new RegExp(`#${e}(?![\\w-])`, "g"), `#${pfx}-${id}`);
+  });
+  return svg;
+}
+// Page-side ink kit: paper, grain, brush displacement, dry-brush texture and a seal.
+// Claude only returns the brush strokes, which keeps each drawing short.
+function inkSVG(inner){
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500"><defs><filter id="ink" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" seed="7"/><feDisplacementMap in="SourceGraphic" scale="8"/></filter><filter id="dry"><feTurbulence type="fractalNoise" baseFrequency="0.7 0.04" numOctaves="2" seed="4" result="n"/><feComposite in="SourceGraphic" in2="n" operator="in"/></filter><filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="3"/><feColorMatrix type="saturate" values="0"/></filter></defs><rect width="800" height="500" fill="#f2ede2"/><rect width="800" height="500" filter="url(#grain)" opacity=".1"/><g filter="url(#ink)" fill="#141414">${inner}</g><rect x="736" y="438" width="30" height="30" rx="3" fill="#a8261c" opacity=".85"/></svg>`;
+}
+const artState = { still:false, loop:false };
+function inkAsk(kind){
+  const p = draft.prompt, i = draft.inputs || {};
+  return `Sumi-e (Japanese ink) / charcoal illustration. Subject: ${p.topic||p.title}; ${[i.situation,i.location,i.emotion&&"mood "+i.emotion].filter(Boolean).join("; ")}.
+Output: line 1 a short caption; then ONLY SVG child elements for viewBox 0 0 800 500 (no <svg> tag; paper, ink filter and red seal are added).
+Style: black ink only (#141414), opacity .12-1 for washes; few bold tapered brush strokes (paths, round caps); add filter="url(#dry)" to some for dry-brush/charcoal; 60%+ empty paper; asymmetric; one focal subject. No text, faces, logos.${kind==="loop" ? "\nAnimate gently with SMIL (animate/animateTransform, 4-8s, repeatCount=\"indefinite\"): drifting mist, rain, falling leaves, rippling water or spreading ink." : ""}
+Under 2.5KB.`;
+}
+function parseInk(text){
+  let t = String(text||"").replace(/```[a-z]*|```/g,"").trim();
+  const k = t.indexOf("<");
+  const caption = k > 0 ? t.slice(0,k).trim().replace(/^caption:\s*/i,"") : "";
+  t = k >= 0 ? t.slice(k) : "";
+  const s = t.match(/<svg[^>]*>([\s\S]*?)<\/svg>/i); if (s) t = s[1];
+  const svg = cleanSVG(inkSVG(t));
+  return svg ? { inner:t, svg, caption, alt:"Ink illustration: " + (caption || draft.prompt.topic || "") } : null;
+}
+async function drawOne(kind){
+  const r = await sampleFn(inkAsk(kind), { modelTier:"default" });
+  const x = parseInk(r.text);
+  if (!x) throw new Error("That drawing couldn't be displayed. Try redrawing.");
+  return x;
+}
+async function runArt(kind){
+  if (!draft || !sampleFn) { renderArt(); return; }
+  const kinds = kind ? [kind] : ["still","loop"];
+  if (kinds.some(k => artState[k])) return;
+  kinds.forEach(k => artState[k] = true);
+  draft.art = draft.art || {};
+  renderArt();
+  await Promise.all(kinds.map(async k => {
+    try { draft.art[k] = await drawOne(k); delete draft.art[k+"Err"]; }
+    catch(e){ draft.art[k+"Err"] = aiError(e); }
+    artState[k] = false;
+  }));
+  scheduleSave();
+  renderArt();
+}
+function renderArt(){
+  const box = $("#artBox"), A = draft?.art || {};
+  const thumb = $("#briefArt");
+  const fig = kind => {
+    const x = A[kind], busy = artState[kind], err = A[kind+"Err"];
+    const body = busy ? `<div class="frame">${loadingHTML(kind==="loop" ? "Ink is moving…" : "Grinding the ink…")}</div>`
+      : x ? `<div class="frame" aria-label="${esc(x.alt||"")}">${scopeIds(x.inner !== undefined ? cleanSVG(inkSVG(x.inner)) || "" : x.svg, kind)}</div>`
+      : `<div class="frame"><p class="hint" style="padding:16px">${esc(err || "Not drawn yet.")}</p></div>`;
+    return `<figure>${body}<figcaption><span>${esc(x && !busy ? x.caption : kind==="loop" ? "Moving ink" : "Still ink")}</span>${kind==="loop" && x && !busy ? `<button class="btn small ghost" id="artPause">Pause</button>` : ""}<button class="btn small" data-redraw="${kind}" ${busy||!sampleFn?"disabled":""}>Redraw</button></figcaption></figure>`;
+  };
+  box.innerHTML = `<div class="sec"><h3>Illustrations <span class="chip alt">Ink, drawn by Claude</span><span style="flex:1"></span><button class="btn small" id="artRedo" ${artState.still||artState.loop||!sampleFn?"disabled":""}>Redraw both</button></h3><div class="art">${fig("still")}${fig("loop")}</div></div>`;
+  const t = A.still || A.loop;
+  thumb.innerHTML = t ? scopeIds(t.inner !== undefined ? cleanSVG(inkSVG(t.inner)) || "" : t.svg, "thumb") : "";
+  $$("[data-redraw]").forEach(b => b.onclick = () => runArt(b.dataset.redraw));
+  $("#artRedo").onclick = () => runArt();
+  const loopFig = box.querySelectorAll(".frame")[1];
+  const btn = $("#artPause");
+  const setPaused = on => { const s = loopFig && loopFig.querySelector("svg"); if (!s) return; loopFig.classList.toggle("paused", on); try { on ? s.pauseAnimations() : s.unpauseAnimations(); } catch {} if (btn) btn.textContent = on ? "Play" : "Pause"; };
+  if (btn) btn.onclick = () => setPaused(!loopFig.classList.contains("paused"));
+  if (reduceMotion()) setPaused(true);
+}
+
+/* =====================================================================
+   Editor's notes (recommendations)
+   ===================================================================== */
+let notesBusy = false;
+async function runNotes(auto){
+  if (!draft || notesBusy) return;
+  if (!sampleFn){ renderNotes("Claude isn't connected in this view, so recommendations can't run."); return; }
+  const n = wordCount();
+  notesBusy = true; renderNotes();
+  if (auto) toast("1,000+ words: your editor is reading");
+  const c = CATS[draft.category];
+  const ask = `${FRAMEWORK}
+Form: ${c.name} — ${c.structure.map(s=>s[0]).join(" > ")}; ${c.range[0]}-${c.range[1]} words (now ${n}).
+Prompt: ${draft.prompt.prompt}
+${draft.notes ? "Your last verdict: " + (draft.notes.headline||"") + " — say what changed.\n" : ""}Draft:
+"""
+${docToText().slice(0, 40000)}
+"""
+Quotes exact, <=20 words. Notes 1-2 sentences. Max 3 items in leaveAlone, cut, confidence.
+JSON only: {"headline":"","readiness":"early draft|working draft|near final|ready","standards":[{"name":"Interior life|Language|Moral weight|In the room|Voice|Truth or comfort|Format & structure","rating":"strong|mixed|weak","note":"","quote":"","example":"rewrite"}],"leaveAlone":[{"quote":"","why":""}],"cut":[{"quote":"","why":"","instead":""}],"priorities":["3, in order"],"confidence":[{"claim":"","level":"%","trustworthyWhen":""}],"selfCritique":""}
+All 7 standards.`;
+  try{
+    draft.notes = await askJSON(ask, "complex");
+    draft.notesAt = Date.now(); draft.notesWords = n; draft.notesHash = hashText(docToText());
+    scheduleSave();
+  }catch(e){ notesBusy=false; renderNotes(aiError(e)); return; }
+  notesBusy = false;
+  renderNotes();
+  if (!auto) switchPane("notes");
+}
+function renderNotes(errMsg){
+  const el = $("#p-notes"); if (!draft) return;
+  const n = wordCount(), N = draft.notes;
+  const head = `<div class="rhead"><span class="num">${n.toLocaleString()} words</span>
+    ${n<1000?`<span class="chip alt">Auto-review at 1,000</span>`:`<span class="chip keep">Auto-review on</span>`}
+    <span class="grow"></span><button class="btn small primary" id="nGo" ${notesBusy?"disabled":""}>Get recommendations</button></div>
+    <p class="hint" style="margin:-6px 0 14px">Notes run automatically whenever you reopen or refresh a draft of 1,000+ words, and once when you cross 1,000. The button works at any length.</p>`;
+  let body = "";
+  if (errMsg) body = `<div class="err">${esc(errMsg)}</div>`;
+  else if (notesBusy) body = loadingHTML("Your editor is reading the draft…");
+  else if (!N) body = `<div class="empty">No notes yet. Keep writing, or ask for recommendations now.</div>`;
+  else {
+    body = `
+    <div class="sec"><div style="display:flex;gap:6px;margin-bottom:6px;flex-wrap:wrap"><span class="chip">${esc(N.readiness||"")}</span><span class="chip alt">Read at ${(draft.notesWords||0).toLocaleString()} words · ${new Date(draft.notesAt).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</span></div>
+      <p class="verdict">${esc(N.headline)}</p></div>
+    <div class="sec"><h3>Priorities</h3><ol style="padding-left:20px;margin:0;font-size:14px">${(N.priorities||[]).map(p=>`<li style="margin-bottom:6px">${esc(p)}</li>`).join("")}</ol></div>
+    <div class="sec"><h3>Against the standard</h3>${(N.standards||[]).map(s=>`
+      <div class="std ${esc(s.rating)}"><h4>${esc(s.name)} <span class="chip ${s.rating==="strong"?"keep":s.rating==="weak"?"cut":"warn"}">${esc(s.rating)}</span></h4>
+      <p>${esc(s.note)}</p>${s.quote?`<div class="quote">“${esc(s.quote)}”</div>`:""}${s.example?`<div class="better"><b>Try:</b> ${esc(s.example)}</div>`:""}</div>`).join("")}</div>
+    <div class="sec"><h3>Restraint: leave these alone</h3>${(N.leaveAlone||[]).map(k=>`<div class="mark keep"><div class="quote">“${esc(k.quote)}”</div>${esc(k.why)}</div>`).join("") || `<p class="src">Nothing flagged.</p>`}</div>
+    <div class="sec"><h3>Ruthlessness: cut or change</h3>${(N.cut||[]).map(k=>`<div class="mark cut"><div class="quote">“${esc(k.quote)}”</div>${esc(k.why)}${k.instead?`<div class="better" style="color:var(--ink)"><b>Instead:</b> ${esc(k.instead)}</div>`:""}</div>`).join("") || `<p class="src">Nothing flagged.</p>`}</div>
+    <div class="sec"><h3>Confidence</h3><ul>${(N.confidence||[]).map(c=>`<li><b>${esc(c.level)}</b> — ${esc(c.claim)} <span class="src">Holds when: ${esc(c.trustworthyWhen)}</span></li>`).join("")}</ul></div>
+    <div class="sec"><h3>The editor's self-critique</h3><p style="font-family:var(--font-body);font-size:15px">${esc(N.selfCritique)}</p></div>`;
+  }
+  el.innerHTML = head + body;
+  $("#nGo").onclick = () => runNotes(false);
+}
+
+/* =====================================================================
+   Panes, copy, wiring
+   ===================================================================== */
+function switchPane(name){
+  $$(".rtabs .tab").forEach(t => t.setAttribute("aria-current", t.dataset.pane===name));
+  $$(".rpane").forEach(p => p.classList.toggle("on", p.id==="p-"+name));
+  if (name==="notes") renderNotes();
+}
+/* ---------- downloads (.docx / .md) ---------- */
+let downloadsApi = null;
+const xesc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+function runsFrom(node, fmt, out){
+  node.childNodes.forEach(n => {
+    if (n.nodeType === 3){ if (n.textContent) out.push({t:n.textContent, ...fmt}); return; }
+    if (n.nodeType !== 1) return;
+    const tag = n.tagName;
+    if (tag === "BR"){ out.push({br:true}); return; }
+    const f = {...fmt};
+    if (tag==="B"||tag==="STRONG") f.b = true;
+    if (tag==="I"||tag==="EM") f.i = true;
+    if (tag==="U") f.u = true;
+    if (tag==="SUP") f.sup = true;
+    runsFrom(n, f, out);
+  });
+  return out;
+}
+function wRuns(runs){
+  return runs.map(r => r.br ? "<w:r><w:br/></w:r>" :
+    `<w:r>${(r.b||r.i||r.u||r.sup) ? `<w:rPr>${r.b?"<w:b/>":""}${r.i?"<w:i/>":""}${r.u?'<w:u w:val="single"/>':""}${r.sup?'<w:vertAlign w:val="superscript"/>':""}</w:rPr>` : ""}<w:t xml:space="preserve">${xesc(r.t.replace(/\u00a0/g," "))}</w:t></w:r>`).join("");
+}
+const wP = (style, runs, extra="") => `<w:p><w:pPr>${style?`<w:pStyle w:val="${style}"/>`:""}${extra}</w:pPr>${wRuns(runs)}</w:p>`;
+function docxBody(){
+  const out = [];
+  const block = (el) => {
+    const tag = el.tagName;
+    if (tag==="UL"||tag==="OL"){ [...el.children].forEach((li,i) => out.push(wP("ListParagraph", [{t:(tag==="UL"?"• ":(i+1)+". ")}, ...runsFrom(li,{},[])]))); return; }
+    const style = {H1:"Title",H2:"Heading1",H3:"Heading2",BLOCKQUOTE:"Quote"}[tag] || "Normal";
+    const extra = el.classList && el.classList.contains("break") ? '<w:jc w:val="center"/>' : "";
+    const runs = runsFrom(el, {}, []);
+    if (!runs.length || !runs.some(r => r.br || r.t.trim())) return;
+    out.push(wP(style, runs, extra));
+  };
+  editor().childNodes.forEach(n => { if (n.nodeType===1) block(n); else if (n.nodeType===3 && n.textContent.trim()) out.push(wP("Normal",[{t:n.textContent}])); });
+  const refs = $("#refs");
+  refs.querySelectorAll("h2, li").forEach(el => out.push(el.tagName==="H2" ? wP("Heading1", runsFrom(el,{},[])) : wP("Normal", runsFrom(el,{},[]), '<w:ind w:left="720" w:hanging="720"/>')));
+  return out.join("");
+}
+async function buildDocx(){
+  if (!window.JSZip) throw {code:"unavailable", message:"The Word exporter didn't load. Try Download .md instead."};
+  const z = new JSZip();
+  z.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/></Types>`);
+  z.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  z.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+  const st = (id, name, rpr, ppr="") => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${name}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr>${ppr}</w:pPr><w:rPr>${rpr}</w:rPr></w:style>`;
+  z.file("word/styles.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia" w:cs="Georgia"/><w:sz w:val="24"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="360" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style>${st("Title","Title",'<w:b/><w:sz w:val="44"/>','<w:spacing w:after="240"/>')}${st("Heading1","heading 1",'<w:b/><w:sz w:val="32"/>','<w:keepNext/><w:spacing w:before="360" w:after="120"/><w:outlineLvl w:val="0"/>')}${st("Heading2","heading 2",'<w:b/><w:caps/><w:sz w:val="22"/>','<w:keepNext/><w:spacing w:before="240" w:after="80"/><w:outlineLvl w:val="1"/>')}${st("Quote","Quote",'<w:i/>','<w:ind w:left="720" w:right="720"/>')}${st("ListParagraph","List Paragraph","",'<w:ind w:left="360"/>')}</w:styles>`);
+  z.file("word/document.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${docxBody()}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`);
+  return await z.generateAsync({type:"blob", mimeType:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
+}
+const fileBase = () => (titleFromDoc().replace(/[^\w\s-]/g,"").trim().replace(/\s+/g," ").slice(0,80) || "Draft");
+async function download(kind){
+  if (!downloadsApi || !draft) return;
+  try{
+    await saveNow();
+    let data, name;
+    if (kind==="docx"){ data = await buildDocx(); name = fileBase() + ".docx"; }
+    else { const refs = $("#refs").innerText.trim(); data = docToText() + (refs ? "\n\n" + refs : "") + "\n"; name = fileBase() + ".md"; }
+    const r = await downloadsApi.save({filename:name, data});
+    if (r && r.status === "saved") toast("Saved to your computer");
+  }catch(e){
+    if (e && e.code === "declined") return;
+    if (e && (e.code === "unavailable" || e.code === "not_granted")){ $("#dlDocx").hidden = $("#dlMd").hidden = true; toast("Downloads aren't available in this view"); return; }
+    toast((e && e.message) || "The download didn't work");
+  }
+}
+
+async function copyDraft(){
+  const refs = $("#refs").innerText.trim();
+  const text = docToText() + (refs ? "\n\n" + refs : "");
+  try { await navigator.clipboard.writeText(text); toast("Draft copied as text"); }
+  catch { toast("Copy was blocked: select the text in the page and copy it"); }
+}
+
+function init(){
+  renderForms();
+  $("#exampleBtn").onclick = fillExample;
+  $("#genBtn").onclick = generate;
+  $("#nav-prompts").onclick = () => { saveNow(); showView("prompts"); };
+  $("#nav-write").onclick = () => { if (draft) showView("write"); };
+  // Close open menus on outside click or Escape; close after choosing a non-confirm item.
+  document.addEventListener("click", e => $$("details.menu[open]").forEach(m => { if (!m.contains(e.target)) m.open = false; }));
+  document.addEventListener("keydown", e => { if (e.key === "Escape") $$("details.menu[open]").forEach(m => m.open = false); });
+  $$("#exportMenu .mi").forEach(b => b.addEventListener("click", () => { $("#exportMenu").open = false; }));
+  $("#copyBtn").onclick = copyDraft;
+  // Text size for the manuscript page (a display setting; remembered in this browser).
+  const setSize = v => { document.documentElement.style.setProperty("--ed-size", v + "px"); $("#fontSize").value = v; };
+  try { const s = localStorage.getItem("promptdesk.fontSize"); if (s) setSize(s); } catch {}
+  // Side panel width (remembered in this browser).
+  const setRail = v => { document.documentElement.style.setProperty("--rail", v + "%"); $$("[data-rail]").forEach(b => b.setAttribute("aria-pressed", b.dataset.rail === String(v))); };
+  let rw = "30"; try { rw = localStorage.getItem("promptdesk.rail") || "30"; } catch {}
+  setRail(rw);
+  $$("[data-rail]").forEach(b => b.onclick = () => { setRail(b.dataset.rail); try { localStorage.setItem("promptdesk.rail", b.dataset.rail); } catch {} });
+  $("#fontSize").onchange = e => { setSize(e.target.value); try { localStorage.setItem("promptdesk.fontSize", e.target.value); } catch {} };
+  $("#completeBtn").onclick = e => armed(e.currentTarget, () => act("complete", draft));
+  $("#restartBtn").onclick = e => armed(e.currentTarget, () => act("restart", draft));
+  $("#deleteBtn").onclick = e => armed(e.currentTarget, () => act("delete", draft));
+  $("#dlDocx").onclick = () => download("docx");
+  $("#dlMd").onclick = () => download("md");
+  $("#briefToggle").onclick = () => { const b=$("#brief"); const c=b.classList.toggle("collapsed"); $("#briefToggle").textContent = c ? "Show full prompt" : "Hide prompt"; $("#briefToggle").setAttribute("aria-expanded", !c); };
+  $$(".rtabs .tab").forEach(t => t.onclick = () => switchPane(t.dataset.pane));
+  wireToolbar();
+  window.addEventListener("beforeunload", () => { if (draft) { try { localStore.put({...draft, html:$("#editor").innerHTML}); } catch {} } });
+  setAIHint();
+  renderDrafts();
+  initPlatform().then(async () => {
+    await renderDrafts();
+    tickRules();
+    const h = (location.hash||"").slice(1);
+    if (h && h.startsWith("d")) openDraft(h);
+  });
+}
+init();
+</script>
+</body>
+</html>

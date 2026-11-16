@@ -1,0 +1,20 @@
+{
+  "siteName": "AI Builds",
+  "pages": [
+    {
+      "id": "goals",
+      "title": "Goals",
+      "initial": "G",
+      "url": "apps/goals/",
+      "summary": "Weekly goals and one-time tasks across five areas, with check-ins."
+    },
+    {
+      "id": "writing",
+      "title": "Writing",
+      "initial": "W",
+      "url": "apps/writing/",
+      "summary": "Writing prompts, drafts with deadlines, and editor's notes from Claude."
+    }
+  ],
+  "notifications": []
+}

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Security · AI Builds</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="shared/aib-store.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="bar">
+    <div class="bar-in">
+      <a class="brand" href="../"><span class="mark" aria-hidden="true"></span>AI Builds</a>
+      <nav class="tabs" aria-label="Dashboard">
+        <a href="./">Overview</a><a href="./apps/goals/">Goals</a><a href="./apps/writing/">Writing</a><a href="./security.html" aria-current="page">Security</a>
+      </nav>
+      <span class="conn" id="conn" data-state="off"><span class="dot" aria-hidden="true"></span><span class="label">Not connected</span></span>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <h1>Security</h1>
+        <p>Whether this browser is connected safely, and who has changed your data.</p>
+      </div>
+      <button type="button" class="btn danger" id="signout" hidden>Sign out of this browser</button>
+    </div>
+
+    <section class="section" aria-labelledby="chk-h">
+      <div class="section-head"><h2 id="chk-h">Connection checks</h2><span class="muted" id="chk-sum"></span></div>
+      <div id="checks"><div class="checks"><p class="empty">Connect to run the checks.</p></div></div>
+    </section>
+
+    <section class="section" aria-labelledby="log-h">
+      <div class="section-head"><h2 id="log-h">Recent changes</h2><span class="muted">Last 40 saves to your private data</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th scope="col">When</th><th scope="col">By</th><th scope="col">Source</th><th scope="col">Change</th></tr></thead>
+          <tbody id="log"><tr><td colspan="4" class="muted">—</td></tr></tbody>
+        </table>
+      </div>
+      <p class="muted" style="font-size:.9rem">Rows marked <span class="chip bad">Unexpected</span> were made by someone other than you or the daily claude.ai push. If you see one, replace your token from any app's settings and check the repository's collaborators on GitHub.</p>
+    </section>
+
+    <footer class="foot"><a href="./">← Back to overview</a></footer>
+  </main>
+  <script src="assets/security.js"></script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://api.github.com; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Overview · AI Builds</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="shared/aib-store.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="bar">
+    <div class="bar-in">
+      <a class="brand" href="../"><span class="mark" aria-hidden="true"></span>AI Builds</a>
+      <nav class="tabs" id="nav" aria-label="Dashboard"></nav>
+      <span class="conn" id="conn" data-state="off"><span class="dot" aria-hidden="true"></span><span class="label">Not connected</span></span>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="page-head">
+      <div>
+        <h1>Overview</h1>
+        <p id="checked">What needs your attention across your apps.</p>
+      </div>
+      <button type="button" class="btn" id="refresh" hidden>Refresh</button>
+    </div>
+
+    <div id="connect-box" hidden></div>
+
+    <section class="stats" id="stats" aria-label="Summary"></section>
+
+    <section class="section" aria-labelledby="att-h">
+      <div class="section-head"><h2 id="att-h">Needs attention</h2><span class="muted" id="att-count"></span></div>
+      <div class="list" id="alerts" aria-live="polite"><p class="empty">Checking your apps…</p></div>
+    </section>
+
+    <section class="section" aria-labelledby="apps-h">
+      <div class="section-head"><h2 id="apps-h">Apps</h2></div>
+      <div class="apps" id="page-cards"></div>
+    </section>
+
+    <footer class="foot"><span>Your data is stored in a private GitHub repository.</span><a href="security.html">Security and recent changes</a></footer>
+  </main>
+  <script src="assets/app.js"></script>
+</body>
+</html>

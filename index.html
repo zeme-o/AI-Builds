@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'self'">
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AI Builds</title>
+  <meta name="description" content="Personal tools built with Claude.">
+  <link rel="stylesheet" href="dashboard/assets/style.css">
+  <style>
+    .intro { display: grid; gap: 10px; padding-top: 12px; }
+    .intro p { color: var(--muted); font-size: 1.08rem; max-width: 56ch; }
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="bar">
+    <div class="bar-in">
+      <a class="brand" href="./" aria-current="page"><span class="mark" aria-hidden="true"></span>AI Builds</a>
+      <nav class="tabs" aria-label="Site"><a href="dashboard/">Dashboard</a></nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="intro">
+      <h1>AI Builds</h1>
+      <p>Personal tools built with Claude. Each one keeps its data in a private repository.</p>
+    </section>
+
+    <section class="section" aria-labelledby="builds-h">
+      <div class="section-head"><h2 id="builds-h">Builds</h2></div>
+      <!-- To add a build: copy the <a class="app"> block and change the link, initial, title and text. -->
+      <div class="apps">
+        <a class="app" href="dashboard/">
+          <div class="app-top"><span class="app-icon" aria-hidden="true">D</span><h3>Dashboard</h3></div>
+          <div class="metric"><span>2 apps · daily checks</span></div>
+          <p>Goals and Writing in one place, with urgent items checked across both.</p>
+          <span class="go">Open Dashboard →</span>
+        </a>
+      </div>
+    </section>
+
+    <footer class="foot"><span>Source on <a href="https://github.com/zeme-o/AI-Builds">GitHub</a></span></footer>
+  </main>
+</body>
+</html>
